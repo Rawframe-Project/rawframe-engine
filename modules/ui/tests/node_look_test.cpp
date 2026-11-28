@@ -5,6 +5,8 @@
 #include "rawframe/test/test.h"
 #include "rawframe/ui/node_look.h"
 
+#include <limits>
+
 using namespace rawframe;
 using namespace rawframe::ui;
 
@@ -18,6 +20,16 @@ RAWFRAME_TEST(ANodesFieldsLayOutAsTheTreeTakesThem) {
                     kSized->height.offset == 20 && kSized->margin[0] == 0 && kSized->placement.absolute);
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.direction = 4}).has_value());
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.scroll = 4}).has_value());
+    const std::optional<Layout> kBounded = layoutOf(NodeFields{
+        .minWidthOffset = 40, .maxHeightScale = 0.5F, .aspect = 1.5F, .flexWrap = 2, .alignLines = 6, .lineGap = 3});
+    RAWFRAME_EXPECT(kBounded.has_value() && kBounded->minWidth.offset == 40 && kBounded->minHeight.automatic &&
+                    kBounded->maxHeight.scale == 0.5F && kBounded->maxWidth.automatic &&
+                    kBounded->aspectRatio == 1.5F && kBounded->wrap && kBounded->wrapReverse &&
+                    kBounded->alignLines == AlignLines::Stretch && kBounded->lineGap == 3);
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.flexWrap = 3}).has_value());
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.alignLines = 7}).has_value());
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = -1}).has_value());
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = std::numeric_limits<float>::quiet_NaN()}).has_value());
 }
 
 RAWFRAME_TEST(ANodesFieldsLookAsTheySay) {

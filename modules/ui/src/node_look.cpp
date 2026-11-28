@@ -8,6 +8,9 @@ namespace rawframe::ui {
 
 namespace {
 
+/// The widest a node's width over its height is, and the tallest.
+constexpr float kMostAspect = 4096;
+
 /// A size along one axis: automatic at nought and nought.
 Dimension dimensionOf(float scale, float offset) noexcept {
     return scale == 0 && offset == 0 ? Dimension{} : Dimension{.automatic = false, .scale = scale, .offset = offset};
@@ -16,7 +19,8 @@ Dimension dimensionOf(float scale, float offset) noexcept {
 } // namespace
 
 std::optional<Layout> layoutOf(const NodeFields& node) noexcept {
-    if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3) {
+    if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3 ||
+        node.flexWrap > 2 || node.alignLines > 6 || !(node.aspect >= 0) || node.aspect > kMostAspect) {
         return std::nullopt;
     }
     const auto kSides = [](float value) {
@@ -25,6 +29,8 @@ std::optional<Layout> layoutOf(const NodeFields& node) noexcept {
     return Layout{
         .width = dimensionOf(node.widthScale, node.widthOffset),
         .height = dimensionOf(node.heightScale, node.heightOffset),
+        .minWidth = dimensionOf(node.minWidthScale, node.minWidthOffset),
+        .minHeight = dimensionOf(node.minHeightScale, node.minHeightOffset),
         .direction = static_cast<Direction>(node.direction),
         .justify = static_cast<Justify>(node.justify),
         // A parent's AUTO stretches.
@@ -43,6 +49,13 @@ std::optional<Layout> layoutOf(const NodeFields& node) noexcept {
                       .anchorX = node.anchorX,
                       .anchorY = node.anchorY},
         .scroll = static_cast<Scroll>(node.scroll),
+        .wrap = node.flexWrap != 0,
+        .wrapReverse = node.flexWrap == 2,
+        .alignLines = static_cast<AlignLines>(node.alignLines),
+        .lineGap = node.lineGap,
+        .maxWidth = dimensionOf(node.maxWidthScale, node.maxWidthOffset),
+        .maxHeight = dimensionOf(node.maxHeightScale, node.maxHeightOffset),
+        .aspectRatio = node.aspect,
     };
 }
 

@@ -11,6 +11,7 @@
 #include "rawframe/ui/errors.h"
 #include "rawframe/ui/tree.h"
 
+#include <array>
 #include <limits>
 
 using namespace rawframe;
@@ -74,6 +75,89 @@ RAWFRAME_TEST(AShareIsOfTheParentsContent) {
             .has_value());
     RAWFRAME_EXPECT(ui.layOut(kPanel, 400, 200).has_value());
     RAWFRAME_EXPECT(placed(ui.rectOf(kHalf), 0, 0, 200, 58));
+}
+
+RAWFRAME_TEST(SizesKeepWithinTheirBoundsAndAnAspect) {
+    auto tree = Tree::create(16);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kPanel = *ui.add(1);
+    const Node kCapped = *ui.add(2);
+    const Node kFloored = *ui.add(3);
+    const Node kSquare = *ui.add(4);
+    for (const Node kChild : {kCapped, kFloored, kSquare}) {
+        RAWFRAME_EXPECT(ui.attach(kPanel, kChild).has_value());
+    }
+    RAWFRAME_EXPECT(
+        ui.setLayout(
+              kPanel,
+              {.width = share(1), .height = share(1), .direction = Direction::Column, .alignItems = Align::Start})
+            .has_value());
+    // A share of 0.9 held to 100 pixels; a share of 0.1 raised to 60; a
+    // width of 80 giving a height of 40 at two wide to one high.
+    RAWFRAME_EXPECT(
+        ui.setLayout(kCapped, {.width = share(0.9F), .height = pixels(10), .maxWidth = pixels(100)}).has_value());
+    RAWFRAME_EXPECT(
+        ui.setLayout(kFloored, {.width = share(0.1F), .height = pixels(10), .minWidth = pixels(60)}).has_value());
+    RAWFRAME_EXPECT(ui.setLayout(kSquare, {.width = pixels(80), .aspectRatio = 2}).has_value());
+    RAWFRAME_EXPECT(ui.layOut(kPanel, 400, 200).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(kCapped), 0, 0, 100, 10));
+    RAWFRAME_EXPECT(placed(ui.rectOf(kFloored), 0, 10, 60, 10));
+    RAWFRAME_EXPECT(placed(ui.rectOf(kSquare), 0, 20, 80, 40));
+}
+
+RAWFRAME_TEST(WrappedLinesGoFromTheCrossEndInReverse) {
+    auto tree = Tree::create(16);
+    if (!tree.has_value()) {
+        return;
+    }
+    Tree& ui = **tree;
+    const Node kGrid = *ui.add(1);
+    std::array<Node, 3> cards{};
+    for (std::size_t index = 0; index < cards.size(); ++index) {
+        cards[index] = *ui.add(2 + index);
+        RAWFRAME_EXPECT(ui.attach(kGrid, cards[index]).has_value());
+        RAWFRAME_EXPECT(ui.setLayout(cards[index], {.width = pixels(60), .height = pixels(20)}).has_value());
+    }
+    // Two cards fit a line of 150; the third breaks to a second line, which
+    // reversed sits above the first, the lines together at the bottom.
+    RAWFRAME_EXPECT(ui.setLayout(kGrid,
+                                 {.width = pixels(150),
+                                  .height = pixels(100),
+                                  .alignItems = Align::Start,
+                                  .wrap = true,
+                                  .wrapReverse = true,
+                                  .alignLines = AlignLines::Start})
+                        .has_value());
+    RAWFRAME_EXPECT(ui.layOut(kGrid, 400, 200).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[0]), 0, 80, 60, 20));
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[1]), 60, 80, 60, 20));
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[2]), 0, 60, 60, 20));
+    // Spread apart, the lines take the room between them.
+    RAWFRAME_EXPECT(ui.setLayout(kGrid,
+                                 {.width = pixels(150),
+                                  .height = pixels(100),
+                                  .alignItems = Align::Start,
+                                  .wrap = true,
+                                  .alignLines = AlignLines::SpaceBetween})
+                        .has_value());
+    RAWFRAME_EXPECT(ui.layOut(kGrid, 400, 200).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[0]), 0, 0, 60, 20));
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[2]), 0, 80, 60, 20));
+    // Ten pixels between lines, five between the cards of one.
+    RAWFRAME_EXPECT(ui.setLayout(kGrid,
+                                 {.width = pixels(150),
+                                  .height = pixels(100),
+                                  .alignItems = Align::Start,
+                                  .gap = 5,
+                                  .wrap = true,
+                                  .lineGap = 10})
+                        .has_value());
+    RAWFRAME_EXPECT(ui.layOut(kGrid, 400, 200).has_value());
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[1]), 65, 0, 60, 20));
+    RAWFRAME_EXPECT(placed(ui.rectOf(cards[2]), 0, 30, 60, 20));
 }
 
 RAWFRAME_TEST(AnAbsoluteNodeIsPlacedByItsAnchorPoint) {

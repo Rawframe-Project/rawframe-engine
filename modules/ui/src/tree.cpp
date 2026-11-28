@@ -74,6 +74,26 @@ muiAlign alignOf(Align align) noexcept {
     return mui_alignAuto;
 }
 
+muiAlignContent alignContentOf(AlignLines lines) noexcept {
+    switch (lines) {
+    case AlignLines::Start:
+        return mui_alignContentStart;
+    case AlignLines::End:
+        return mui_alignContentEnd;
+    case AlignLines::Center:
+        return mui_alignContentCenter;
+    case AlignLines::SpaceBetween:
+        return mui_alignContentSpaceBetween;
+    case AlignLines::SpaceAround:
+        return mui_alignContentSpaceAround;
+    case AlignLines::SpaceEvenly:
+        return mui_alignContentSpaceEvenly;
+    case AlignLines::Stretch:
+        return mui_alignContentStretch;
+    }
+    return mui_alignContentStart;
+}
+
 muiTextAlign textAlignOf(TextAlign align) noexcept {
     switch (align) {
     case TextAlign::Start:
@@ -221,15 +241,21 @@ result::Status Tree::setLayout(Node node, const Layout& layout) {
     style.sizing.height = dimensionOf(layout.height);
     style.sizing.minWidth = dimensionOf(layout.minWidth);
     style.sizing.minHeight = dimensionOf(layout.minHeight);
+    style.sizing.maxWidth = dimensionOf(layout.maxWidth);
+    style.sizing.maxHeight = dimensionOf(layout.maxHeight);
+    style.sizing.aspectRatio = layout.aspectRatio;
     style.container.direction = static_cast<muiFlexDirection>(layout.direction);
     style.container.justify = static_cast<muiJustify>(layout.justify);
     style.container.alignItems = alignOf(layout.alignItems);
     if (layout.wrap) {
-        style.container.wrap = mui_wrapWrap;
-        style.container.alignContent = mui_alignContentStart;
+        style.container.wrap = layout.wrapReverse ? mui_wrapReverse : mui_wrapWrap;
+        style.container.alignContent = alignContentOf(layout.alignLines);
     }
-    style.container.rowGap = layout.gap;
-    style.container.columnGap = layout.gap;
+    // `gap` along a line, `lineGap` between lines: a row's lines are rows.
+    const float kAcross = layout.lineGap != 0 ? layout.lineGap : layout.gap;
+    const bool kRow = layout.direction == Direction::Row || layout.direction == Direction::RowReverse;
+    style.container.rowGap = kRow ? kAcross : layout.gap;
+    style.container.columnGap = kRow ? layout.gap : kAcross;
     style.item.grow = layout.grow;
     style.item.shrink = layout.shrink;
     style.item.alignSelf = alignOf(layout.alignSelf);

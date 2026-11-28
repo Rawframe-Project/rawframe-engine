@@ -124,6 +124,18 @@ struct NodeFields {
     std::uint32_t popup = 0;
     std::uint32_t disabled = 0;
     std::uint32_t kept = 0;
+    float minWidthScale = 0;
+    float minWidthOffset = 0;
+    float minHeightScale = 0;
+    float minHeightOffset = 0;
+    float maxWidthScale = 0;
+    float maxWidthOffset = 0;
+    float maxHeightScale = 0;
+    float maxHeightOffset = 0;
+    float aspect = 0;
+    std::uint32_t flexWrap = 0;
+    std::uint32_t alignLines = 0;
+    float lineGap = 0;
 };
 
 /// One node of a document.

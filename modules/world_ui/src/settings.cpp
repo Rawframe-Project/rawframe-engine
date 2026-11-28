@@ -175,7 +175,19 @@ settingsOf(const world_kest::GameFiles& files, const kest::Program& program, std
                                 {"checked", offsetof(ui::NodeFields, checked)},
                                 {"popup", offsetof(ui::NodeFields, popup)},
                                 {"disabled", offsetof(ui::NodeFields, disabled)},
-                                {"kept", offsetof(ui::NodeFields, kept)}})) {
+                                {"kept", offsetof(ui::NodeFields, kept)},
+                                {"minWidthScale", offsetof(ui::NodeFields, minWidthScale)},
+                                {"minWidthOffset", offsetof(ui::NodeFields, minWidthOffset)},
+                                {"minHeightScale", offsetof(ui::NodeFields, minHeightScale)},
+                                {"minHeightOffset", offsetof(ui::NodeFields, minHeightOffset)},
+                                {"maxWidthScale", offsetof(ui::NodeFields, maxWidthScale)},
+                                {"maxWidthOffset", offsetof(ui::NodeFields, maxWidthOffset)},
+                                {"maxHeightScale", offsetof(ui::NodeFields, maxHeightScale)},
+                                {"maxHeightOffset", offsetof(ui::NodeFields, maxHeightOffset)},
+                                {"aspect", offsetof(ui::NodeFields, aspect)},
+                                {"flexWrap", offsetof(ui::NodeFields, flexWrap)},
+                                {"alignLines", offsetof(ui::NodeFields, alignLines)},
+                                {"lineGap", offsetof(ui::NodeFields, lineGap)}})) {
         return refuse("the game's rawframe.ui.Node is not as the engine reads it");
     }
     settings.parents.resize(settings.nodes.size());

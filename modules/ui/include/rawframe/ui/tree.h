@@ -67,6 +67,18 @@ enum class Align : std::uint8_t {
     Center
 };
 
+/// Where a wrapping container's lines sit on the cross axis: `Justify`'s
+/// cases, or stretched to share the room.
+enum class AlignLines : std::uint8_t {
+    Start,
+    End,
+    Center,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+    Stretch
+};
+
 /// Where an absolute node goes: out of its
 /// parent's flex layout, its start and top edges at `x` and `y` from the
 /// start and top of its parent's padding box (automatic for where it would
@@ -121,6 +133,19 @@ struct Layout {
     /// line after the last from the cross start, as CSS's flex-wrap: a grid
     /// of cards.
     bool wrap = false;
+    /// With `wrap`, each line after the last from the cross end instead.
+    bool wrapReverse = false;
+    /// With `wrap`, where the lines sit across the node when they leave
+    /// room, as CSS's align-content.
+    AlignLines alignLines = AlignLines::Start;
+    /// With `wrap`, the pixels between lines; nought takes `gap`.
+    float lineGap = 0;
+    /// The most the node is, each unbounded when automatic.
+    Dimension maxWidth;
+    Dimension maxHeight;
+    /// Its border box's width over its height, nought for none: a size
+    /// given on one axis gives the other.
+    float aspectRatio = 0;
 };
 
 /// A shadow of a node's rounded box, as CSS's box-shadow: its color,
