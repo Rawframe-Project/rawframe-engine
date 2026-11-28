@@ -48,3 +48,5 @@ Clips are WAVE, Ogg Vorbis or MP3 files the cook turns into short clips or Opus,
 - A sound with no voice free goes virtual rather than silent, and comes back where it would be when one frees.
 
 A client plays sound when `audio.play` is set; exported games set it. `audio.record` records what a client heard to a file instead, for tests.
+
+Sound plays on the system's default output and follows it: plugging in headphones that become the default moves it there. `audio.device` in the client's configuration on the player's machine names another device by its key, which stays the same when the device is unplugged and plugged again; while that device is away the default plays, and sound returns to it when it comes back. Each move is logged (`audio.output_moved`).

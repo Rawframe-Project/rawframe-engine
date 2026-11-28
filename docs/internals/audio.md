@@ -20,7 +20,7 @@ The mixer sums playing sounds through the layout's buses, their effects, faders 
 - the owner thread plays, stops and changes things through a command queue;
 - the mix thread renders without locks, allocation or blocking, and hands back what finished through a second queue, so every release happens on the owner's thread.
 
-An output opens a device at its own rate through Maul Audio (PipeWire, PulseAudio or ALSA, each opened at run time on Linux; WASAPI on Windows; Core Audio on Apple's platforms; AAudio on Android), and its real-time thread renders a mixer made at that rate into every buffer the device asks for. In the browser, which plays sound from its own thread, the client renders into a sink once a frame and the page drains it onto an AudioContext.
+An output opens a device at its own rate through Maul Audio (PipeWire, PulseAudio or ALSA, each opened at run time on Linux; WASAPI on Windows; Core Audio on Apple's platforms; AAudio on Android), and its real-time thread renders a mixer made at that rate into every buffer the device asks for. It follows the device it should be on, by the notifications Maul Audio queues, taken in once a frame: a stream on the default is moved by the library, and one on a chosen device is made again on the default when that device goes and on the device when its key comes back, at the rate its mixer was made at, the platform converting where the new device runs at another. Devices are chosen by key, never by id, since an id dies with its device. In the browser, which plays sound from its own thread, the client renders into a sink once a frame and the page drains it onto an AudioContext.
 
 ## Clips and streaming
 

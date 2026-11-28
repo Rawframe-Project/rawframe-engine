@@ -6,6 +6,18 @@
 
 namespace rawframe::audio {
 
+namespace {
+
+std::unexpected<result::Error> noDevice() {
+    return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
+                                                       kAudioDomain,
+                                                       code(AudioError::NoDevice),
+                                                       "this platform gives no audio device yet")
+                                              .error()};
+}
+
+} // namespace
+
 struct Output::State {};
 
 Output::Output(std::unique_ptr<State> state) noexcept : state_(std::move(state)) {
@@ -14,11 +26,7 @@ Output::Output(std::unique_ptr<State> state) noexcept : state_(std::move(state))
 Output::~Output() = default;
 
 result::Result<std::unique_ptr<Output>> Output::open(const OutputSettings&) {
-    return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
-                                                       kAudioDomain,
-                                                       code(AudioError::NoDevice),
-                                                       "this platform gives no audio device yet")
-                                              .error()};
+    return noDevice();
 }
 
 std::uint32_t Output::rate() const noexcept {
@@ -30,11 +38,7 @@ std::string Output::backendName() const {
 }
 
 result::Status Output::start(Mixer&) {
-    return std::unexpected<result::Error>{result::fail(result::ErrorClass::Unavailable,
-                                                       kAudioDomain,
-                                                       code(AudioError::NoDevice),
-                                                       "this platform gives no audio device yet")
-                                              .error()};
+    return noDevice();
 }
 
 void Output::stop() noexcept {
@@ -46,6 +50,38 @@ OutputState Output::state() const noexcept {
 
 OutputStatistics Output::statistics() const noexcept {
     return {};
+}
+
+result::Result<std::vector<OutputDevice>> Output::devices() const {
+    return std::vector<OutputDevice>{};
+}
+
+result::Status Output::choose(std::string_view) {
+    return noDevice();
+}
+
+std::string Output::chosen() const {
+    return {};
+}
+
+std::string Output::device() const {
+    return {};
+}
+
+bool Output::follow() {
+    return false;
+}
+
+result::Status Output::plug(std::string_view, std::string_view) {
+    return noDevice();
+}
+
+result::Status Output::unplug(std::string_view) {
+    return noDevice();
+}
+
+result::Status Output::makeDefault(std::string_view) {
+    return noDevice();
 }
 
 } // namespace rawframe::audio
