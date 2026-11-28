@@ -72,6 +72,8 @@ ATTRIBUTION_ALLOWED = {
     # v0.1.0's squash, which the manager's merge tool made from the release
     # pull request's body with release-please's footer still in it.
     "d0f7bda78f9c5cbf77537927612e2b5e49fa063b",
+    # v0.9.0's squash, made the same way from release-please's body.
+    "b1a43404296f1f455c07d9259c9fe679f8eaf0fc",
 }
 VALUE_CALL = re.compile(r"\.value\(\s*\)")
 RANDOM_DEVICE = re.compile(r"\bstd::random_device\b")
