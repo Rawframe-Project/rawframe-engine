@@ -13,8 +13,9 @@ namespace rawframe::world_audio {
 /// - `rawframe.world_audio.recorder` writes what it heard to a 48 kHz stereo
 ///   WAVE file when the World stops, then logs a summary.
 /// - `rawframe.world_audio.player` plays it on an output device, whose own
-///   thread renders the mixer at the device's rate, and logs a summary when
-///   the World stops. A machine without a device logs that and runs on
+///   thread renders the mixer at the device's rate, follows the device it
+///   should be on as devices come and go, and logs a summary when the World
+///   stops. A machine without a device logs that and runs on
 ///   unheard.
 ///
 /// Configuration keys:
@@ -26,6 +27,10 @@ namespace rawframe::world_audio {
 ///                          (frame_sink.h) and plays what each frame renders
 ///                          into it, as a page does
 ///   audio.play_period      the device's buffer in frames (256)
+///   audio.device           the key of the output device a player chose;
+///                          unset follows the system's default. While
+///                          that device is away the default plays, and
+///                          output returns to it when it comes back
 ///   audio.client           which of the process's clients to hear (0)
 ///
 /// The game is the Runtime's game files (`rawframe.world_kest.game_files`),

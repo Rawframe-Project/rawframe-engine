@@ -41,6 +41,7 @@ constexpr EventIdentity kUnheard{"audio", "output_unavailable"};
 constexpr EventIdentity kSilent{"audio", "game_silent"};
 constexpr EventIdentity kSuspended{"audio", "output_suspended"};
 constexpr EventIdentity kResumed{"audio", "output_resumed"};
+constexpr EventIdentity kMoved{"audio", "output_moved"};
 constexpr EventIdentity kUnread{"audio", "sounds_unavailable"};
 constexpr EventIdentity kUnreadSound{"audio", "sound_unavailable"};
 constexpr EventIdentity kSoundsRead{"audio", "sounds_read"};
@@ -455,6 +456,16 @@ public:
         }
         RAWFRAME_TRY_ASSIGN(const std::uint64_t kPeriod, configuration.unsignedInteger("audio.play_period", 256));
         settings.periodFrames = static_cast<std::uint32_t>(std::min<std::uint64_t>(kPeriod, 1U << 16U));
+        // The device a player chose, by its key, on the player's machine.
+        if (const auto kDevice = configuration.text("audio.device"); kDevice.has_value()) {
+            if (kDevice->size() > audio::kMaxDeviceKeyBytes) {
+                return std::unexpected<result::Error>{refuse(result::ErrorClass::InvalidArgument,
+                                                             WorldAudioError::NoAudio,
+                                                             "audio.device is longer than a device key")
+                                                          .error()};
+            }
+            settings.device = std::string{*kDevice};
+        }
         auto output = audio::Output::open(settings);
         if (!output.has_value()) {
             unavailable_ = std::string{output.error().description()};
@@ -486,6 +497,13 @@ public:
         }
         if (frame.suspended != suspended_) {
             suspend(frame.suspended);
+        }
+        if (output_ != nullptr && output_->follow()) {
+            emitter_.log(
+                diagnostics::Severity::Info,
+                kMoved,
+                "the output moved to another device",
+                {diagnostics::field("device", output_->device()), diagnostics::field("chosen", output_->chosen())});
         }
         const std::optional<double> kSeconds = hearing_.hear(frame);
         if (!kSeconds.has_value()) {
@@ -519,7 +537,11 @@ public:
         }
         peak_ = std::max(
             {peak_, hearing_.mixer->meter(hearing_.master).peakLeft, hearing_.mixer->meter(hearing_.master).peakRight});
-        if (output_ != nullptr && !lostReported_ && output_->state() == audio::OutputState::Lost) {
+        const bool kLost = output_ != nullptr && output_->state() == audio::OutputState::Lost;
+        if (!kLost) {
+            // A device found again: a later loss is told again.
+            lostReported_ = false;
+        } else if (!lostReported_) {
             lostReported_ = true;
             emitter_.log(diagnostics::Severity::Warning,
                          kUnheard,
@@ -571,7 +593,8 @@ public:
                       diagnostics::field("refused", kHeard.refused),
                       diagnostics::field("suspensions", suspensions_),
                       diagnostics::field("volumesSet", hearing_.volumesSet),
-                      diagnostics::field("continuous", kHeard.continuous)});
+                      diagnostics::field("continuous", kHeard.continuous),
+                      diagnostics::field("moves", kOutput.moves)});
     }
 
 private:

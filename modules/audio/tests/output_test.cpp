@@ -9,6 +9,7 @@
 #include "rawframe/test/test.h"
 
 #include <chrono>
+#include <string>
 #include <thread>
 
 using namespace rawframe;
@@ -119,4 +120,80 @@ RAWFRAME_TEST(AMachineWithoutADeviceIsRefusedByType) {
         RAWFRAME_EXPECT(output.error().errorClass() == result::ErrorClass::Unavailable &&
                         output.error().code() == code(AudioError::NoDevice));
     }
+}
+
+RAWFRAME_TEST(AnOutputFollowsTheDefaultDeviceAtItsOwnRate) {
+    auto output = *Output::open({.backend = OutputBackend::Null, .rate = 44'100, .periodFrames = 128});
+    auto mixer = *Mixer::create(layout(), {.rate = output->rate()});
+    RAWFRAME_EXPECT(output->start(*mixer).has_value());
+    const std::string kFirst = output->device();
+    RAWFRAME_EXPECT(output->chosen().empty() && !output->follow());
+
+    // Headphones plugged in and made the default: the output moves to them
+    // and its mixer goes on at the rate it was made at.
+    RAWFRAME_EXPECT(output->plug("headphones", "Headphones").has_value());
+    RAWFRAME_EXPECT(!output->follow() && output->device() == kFirst);
+    RAWFRAME_EXPECT(output->makeDefault("headphones").has_value());
+    RAWFRAME_EXPECT(output->follow());
+    RAWFRAME_EXPECT(output->device() == "headphones" && output->rate() == 44'100);
+    RAWFRAME_EXPECT(output->state() == OutputState::Rendering && output->statistics().moves >= 1);
+    const std::uint64_t kMoved = output->statistics().callbacks;
+    RAWFRAME_EXPECT(await([&] {
+        return output->statistics().callbacks > kMoved + 2;
+    }));
+
+    // Unplugged, the default passes back, and the output with it.
+    RAWFRAME_EXPECT(output->unplug("headphones").has_value());
+    output->follow();
+    RAWFRAME_EXPECT(output->device() == kFirst && output->state() == OutputState::Rendering);
+    const std::uint64_t kBack = output->statistics().callbacks;
+    RAWFRAME_EXPECT(await([&] {
+        return output->statistics().callbacks > kBack + 2;
+    }));
+    output->stop();
+}
+
+RAWFRAME_TEST(AChosenDeviceIsPlayedOnWhileItIsThereAndReturnedTo) {
+    // Chosen before it is plugged in: the default plays meanwhile.
+    auto output = *Output::open({.backend = OutputBackend::Null, .periodFrames = 128, .device = "usb-dac"});
+    auto mixer = *Mixer::create(layout(), {.rate = output->rate()});
+    RAWFRAME_EXPECT(output->start(*mixer).has_value());
+    const std::string kDefault = output->device();
+    RAWFRAME_EXPECT(output->chosen() == "usb-dac" && kDefault != "usb-dac");
+
+    RAWFRAME_EXPECT(output->plug("usb-dac", "USB DAC").has_value());
+    RAWFRAME_EXPECT(output->follow() && output->device() == "usb-dac");
+    // The list names it by key and name, and says which is the default.
+    const auto kListed = output->devices();
+    RAWFRAME_EXPECT(kListed.has_value() && kListed->size() == 2);
+    if (kListed.has_value() && kListed->size() == 2) {
+        const OutputDevice& kDac = kListed->at(0).key == "usb-dac" ? kListed->at(0) : kListed->at(1);
+        RAWFRAME_EXPECT(kDac.key == "usb-dac" && kDac.name == "USB DAC" && !kDac.isDefault);
+    }
+
+    // A new default does not take a chosen device's place.
+    RAWFRAME_EXPECT(output->plug("speakers", "Speakers").has_value());
+    RAWFRAME_EXPECT(output->makeDefault("speakers").has_value());
+    output->follow();
+    RAWFRAME_EXPECT(output->device() == "usb-dac");
+
+    // Lost, it plays on the default; back, on it again, as a new id with
+    // the same key.
+    RAWFRAME_EXPECT(output->unplug("usb-dac").has_value());
+    RAWFRAME_EXPECT(output->follow() && output->device() == "speakers");
+    RAWFRAME_EXPECT(output->state() == OutputState::Rendering);
+    const std::uint64_t kOnDefault = output->statistics().callbacks;
+    RAWFRAME_EXPECT(await([&] {
+        return output->statistics().callbacks > kOnDefault + 2;
+    }));
+    RAWFRAME_EXPECT(output->plug("usb-dac", "USB DAC").has_value());
+    RAWFRAME_EXPECT(output->follow() && output->device() == "usb-dac");
+
+    // Choosing no device follows the default again.
+    RAWFRAME_EXPECT(output->choose("").has_value());
+    RAWFRAME_EXPECT(output->device() == "speakers" && output->chosen().empty());
+    const result::Status kLong = output->choose(std::string(kMaxDeviceKeyBytes + 1, 'k'));
+    RAWFRAME_EXPECT(!kLong.has_value() && kLong.error().errorClass() == result::ErrorClass::InvalidArgument);
+    RAWFRAME_EXPECT(output->statistics().moves >= 4);
+    output->stop();
 }
