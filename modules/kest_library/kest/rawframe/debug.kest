@@ -10,7 +10,7 @@ module rawframe.debug
 // for this tick alone, so a present system that draws it each tick shows
 // it as long as it does; more for that long; FOREVER until its channel is
 // cleared. A shape is on a `channel` from 0 to 31; the client's
-// `render.debug_channels` says which are drawn, so many systems can draw at
+// `scene.debug_channels` says which are drawn, so many systems can draw at
 // once and be looked at one by one. At most 1024 shapes are held; a shape
 // past them, on no channel, or at a point not finite is left out.
 //
