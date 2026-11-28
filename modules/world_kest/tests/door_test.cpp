@@ -142,3 +142,32 @@ RAWFRAME_TEST(LookupsOfWhatIsNotThereAnswerWithoutHarm) {
         RAWFRAME_EXPECT(seen[0] == 14 && seen[1] == 3 && seen[2] == 21);
     });
 }
+
+RAWFRAME_TEST(AQueueCarriesEachMessageToEveryReaderOnce) {
+    play("relay.game", 5, [](world::World& world) {
+        struct Tally {
+            std::uint32_t seen;
+            std::uint64_t last;
+        };
+        const auto kLate = schema::ComponentTypeId::fromText("37806ddb-7230-480a-90c9-7c4dd2b2905e");
+        const auto kEarly = schema::ComponentTypeId::fromText("0d45e089-17c5-43e9-acef-b1950e8d672a");
+        const auto kLateHeld = holding(world, kLate);
+        const auto kEarlyHeld = holding(world, kEarly);
+        RAWFRAME_EXPECT(kLateHeld.size() == 1 && kEarlyHeld.size() == 1);
+        if (kLateHeld.size() != 1 || kEarlyHeld.size() != 1) {
+            return;
+        }
+        const Tally* const kAfter = valueOf<Tally>(world, kLateHeld[0], kLate);
+        const Tally* const kBefore = valueOf<Tally>(world, kEarlyHeld[0], kEarly);
+        // Five pings: the reader after the writer read each the tick it was
+        // written, the one before it each but the last the tick after, and
+        // neither read one twice.
+        RAWFRAME_EXPECT(kAfter != nullptr && kBefore != nullptr);
+        if (kAfter != nullptr && kBefore != nullptr) {
+            RAWFRAME_EXPECT(kAfter->seen == 5 && kBefore->seen == 4 && kAfter->last == kBefore->last + 1);
+        }
+        // The World's queue holds what is not yet over: the last two ticks'.
+        const world::MessageQueue* const kPings = world.queues().find("pings");
+        RAWFRAME_EXPECT(kPings != nullptr && kPings->messages().size() == 2 && kPings->nextSequence() == 5);
+    });
+}

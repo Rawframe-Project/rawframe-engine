@@ -6,6 +6,7 @@
 #include "rawframe/world/archetype.h"
 #include "rawframe/world/command_buffer.h"
 #include "rawframe/world/entity.h"
+#include "rawframe/world/queues.h"
 #include "rawframe/world/random.h"
 
 #include <cstddef>
@@ -114,6 +115,14 @@ public:
     /// is published.
     void restoreRandomStream(std::string owner, std::string name, Pcg32 state);
 
+    /// Its message queues: World state a checkpoint carries.
+    [[nodiscard]] Queues& queues() noexcept {
+        return queues_;
+    }
+    [[nodiscard]] const Queues& queues() const noexcept {
+        return queues_;
+    }
+
     /// Applies a command buffer in recording order and clears it. All or
     /// nothing on capacity: if the World cannot fit every entity the buffer
     /// creates, nothing is applied and the result is `resource_exhausted`.
@@ -169,6 +178,7 @@ private:
     std::map<std::vector<schema::ComponentRuntimeId>, std::uint32_t> archetypeIndex_;
     bool structureLocked_ = false;
     std::map<std::pair<std::string, std::string>, Pcg32, std::less<>> randomStreams_;
+    Queues queues_;
     /// The persistent identity component, if the registry has it.
     std::optional<schema::ComponentRuntimeId> persistent_;
 };

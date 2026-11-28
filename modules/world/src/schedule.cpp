@@ -200,6 +200,8 @@ result::Result<TickReport> Schedule::runTick(World& world,
                                              bool edited) {
     TickReport report;
     report.tick = tick;
+    // Messages whose ticks are over go before any system reads.
+    world.queues().expire(tick);
     if (clock != nullptr) {
         report.times.reserve(entries_.size());
     }

@@ -117,6 +117,38 @@ RAWFRAME_TEST(ControlsAreDeclaredByLine) {
     RAWFRAME_EXPECT(refusedAt(std::string{kHead} + "input a.stick\nsample s.kest\n", WorldKestError::BadGameLine, "4"));
 }
 
+RAWFRAME_TEST(QueuesAreDeclaredByLine) {
+    constexpr std::string_view kHead = "program p.kest\n"
+                                       "component 0d3f8a3e-7c55-4b8e-9d0e-2a61f3c4b5a1 a.mark Mark\n";
+    auto game = parseGame(std::string{kHead} + "queue hits Hit lasts 3 holds 16\nqueue misses Miss lasts 1\n" +
+                          "system a.send simulation send read a.mark writes hits\n" +
+                          "system a.hear simulation hear read a.mark reads hits reads misses\n");
+    RAWFRAME_EXPECT(game.has_value() && game->queues.size() == 2 && game->queues[0].lasts == 3 &&
+                    game->queues[0].holds == 16 && game->queues[1].holds == 1024 &&
+                    game->systems[0].writes == std::vector<std::string>{"hits"} &&
+                    game->systems[1].reads == (std::vector<std::string>{"hits", "misses"}));
+    // A line's shape, counts from 1 to 65536 in their one spelling, and a
+    // name once.
+    for (const std::string_view kLine : {"queue hits Hit\n",
+                                         "queue hits Hit lasts 0\n",
+                                         "queue hits Hit lasts 65537\n",
+                                         "queue hits Hit lasts 03\n",
+                                         "queue hits Hit lasts 2 holds\n",
+                                         "queue hits Hit lasts 2 keeps 4\n",
+                                         "queue Hits Hit lasts 2\n"}) {
+        RAWFRAME_EXPECT(refusedAt(std::string{kHead} + std::string{kLine}, WorldKestError::BadGameLine, "3"));
+    }
+    RAWFRAME_EXPECT(refusedAt(
+        std::string{kHead} + "queue hits Hit lasts 2\nqueue hits Hit lasts 2\n", WorldKestError::BadGameLine, "4"));
+    // A system writes and reads declared queues, once each, and is not
+    // predicted.
+    RAWFRAME_EXPECT(!parseGame(std::string{kHead} + "system a.send simulation send read a.mark writes hits\n"));
+    RAWFRAME_EXPECT(!parseGame(std::string{kHead} + "queue hits Hit lasts 2\n" +
+                               "system a.send simulation send read a.mark reads hits reads hits\n"));
+    RAWFRAME_EXPECT(!parseGame(std::string{kHead} + "queue hits Hit lasts 2\n" +
+                               "system a.send simulation send read a.mark writes hits predicted\n"));
+}
+
 RAWFRAME_TEST(AudioIsDeclaredByLine) {
     auto game = parseGame("program p.kest\nmixer game.mixer\nsound 00000000000000a1 steps.sound\n"
                           "sound 00000000000000a2 shot.sound\n");

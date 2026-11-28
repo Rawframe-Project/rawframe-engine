@@ -115,6 +115,79 @@ result::Result<std::vector<CheckpointMod>> readModSet(std::span<const std::byte>
     return mods;
 }
 
+void writeQueue(Output& out, const world::MessageQueue& queue) {
+    const world::QueueDeclaration& kDeclaration = queue.declaration();
+    out.u32(static_cast<std::uint32_t>(kDeclaration.name.size()));
+    out.bytes(std::as_bytes(std::span{kDeclaration.name.data(), kDeclaration.name.size()}));
+    out.u32(static_cast<std::uint32_t>(kDeclaration.valueBytes));
+    out.u32(kDeclaration.lasts);
+    out.u32(kDeclaration.holds);
+    out.u32(static_cast<std::uint32_t>(queue.cursors().size()));
+    for (const auto& [kReader, kCursor] : queue.cursors()) {
+        out.u32(static_cast<std::uint32_t>(kReader.size()));
+        out.bytes(std::as_bytes(std::span{kReader.data(), kReader.size()}));
+        out.u64(kCursor);
+    }
+    out.u64(queue.nextSequence());
+    out.u32(static_cast<std::uint32_t>(queue.messages().size()));
+    for (const world::QueuedMessage& message : queue.messages()) {
+        out.u64(message.tick.value);
+        out.u64(message.sequence);
+        out.bytes(message.value);
+    }
+}
+
+result::Result<ReadQueue> readQueue(std::span<const std::byte> payload) {
+    Input in{payload};
+    ReadQueue read;
+    const auto kText = [&in](std::string& into, std::size_t most) {
+        std::uint32_t length = 0;
+        std::span<const std::byte> taken;
+        if (!in.u32(length) || length == 0 || length > most || !in.take(length, taken)) {
+            return false;
+        }
+        into.assign(reinterpret_cast<const char*>(taken.data()), taken.size());
+        return true;
+    };
+    std::uint32_t valueBytes = 0;
+    std::uint32_t readers = 0;
+    if (!kText(read.declaration.name, world::kMaximumQueueNameBytes) || !in.u32(valueBytes) ||
+        !in.u32(read.declaration.lasts) || !in.u32(read.declaration.holds) || !in.u32(readers) ||
+        readers > world::kMaximumQueueReaders) {
+        return malformed("a queue's declaration is short or past its bounds");
+    }
+    read.declaration.valueBytes = valueBytes;
+    for (std::uint32_t reader = 0; reader < readers; ++reader) {
+        std::string name;
+        std::uint64_t cursor = 0;
+        if (!kText(name, world::kMaximumQueueNameBytes) || !in.u64(cursor)) {
+            return malformed("a queue's reader is short or past its bounds");
+        }
+        if (!read.cursors.empty() && read.cursors.rbegin()->first >= name) {
+            return malformed("a queue's readers are out of order or repeated");
+        }
+        read.declaration.readers.push_back(name);
+        read.cursors.emplace(std::move(name), cursor);
+    }
+    std::uint32_t messages = 0;
+    if (!in.u64(read.nextSequence) || !in.u32(messages) || messages > read.declaration.holds ||
+        valueBytes > world::kMaximumQueuedValueBytes) {
+        return malformed("a queue holds more messages than it may, or values past the bound");
+    }
+    for (std::uint32_t message = 0; message < messages; ++message) {
+        world::QueuedMessage& held = read.messages.emplace_back();
+        std::span<const std::byte> value;
+        if (!in.u64(held.tick.value) || !in.u64(held.sequence) || !in.take(valueBytes, value)) {
+            return malformed("a queued message is short");
+        }
+        held.value.assign(value.begin(), value.end());
+    }
+    if (in.remaining() != 0) {
+        return malformed("a queue is not its exact length");
+    }
+    return read;
+}
+
 void writeManifest(Output& out, const Manifest& manifest) {
     for (const ChunkHeader& entry : manifest.entries) {
         out.u64(entry.ordinal);

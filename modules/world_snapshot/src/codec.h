@@ -7,6 +7,8 @@
 #include "container.h"
 
 #include <cstdint>
+#include <map>
+#include <string>
 
 namespace rawframe::world_snapshot::detail {
 
@@ -61,6 +63,20 @@ void writeModSet(Output& out, std::span<const CheckpointMod> mods);
                                                                     std::uint64_t records);
 /// Whether `mods` is a set a checkpoint may record.
 [[nodiscard]] bool validModSet(std::span<const CheckpointMod> mods) noexcept;
+
+/// A queue's payload: its declaration (name, value bytes, ticks it keeps a
+/// message, messages it holds), each reader by identity with its cursor in
+/// identity order, the place the next message takes, then each message
+/// held: its tick, its place, and its value. Reading refuses what the
+/// World would not take, which writing never makes.
+void writeQueue(Output& out, const world::MessageQueue& queue);
+struct ReadQueue {
+    world::QueueDeclaration declaration;
+    std::vector<world::QueuedMessage> messages;
+    std::uint64_t nextSequence = 0;
+    std::map<std::string, std::uint64_t, std::less<>> cursors;
+};
+[[nodiscard]] result::Result<ReadQueue> readQueue(std::span<const std::byte> payload);
 
 void writeManifest(Output& out, const Manifest& manifest);
 [[nodiscard]] result::Result<Manifest> readManifest(std::span<const std::byte> payload, std::uint64_t entries);

@@ -6,6 +6,7 @@ rawframe_module(NAME world
         src/column_query.cpp
         src/command_buffer.cpp
         src/persistent.cpp
+        src/queues.cpp
         src/random.cpp
         src/schedule.cpp
         src/time.cpp
@@ -18,6 +19,7 @@ rawframe_module_tests(NAME world SOURCES
     tests/command_buffer_test.cpp
     tests/persistent_test.cpp
     tests/query_test.cpp
+    tests/queues_test.cpp
     tests/random_test.cpp
     tests/schedule_test.cpp
     tests/world_test.cpp

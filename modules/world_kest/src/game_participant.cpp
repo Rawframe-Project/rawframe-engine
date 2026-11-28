@@ -17,6 +17,7 @@
 #include "player_doors.h"
 #include "predictor.h"
 #include "presentation.h"
+#include "queue_doors.h"
 #include "rawframe/base/platform.h"
 #include "rawframe/base/sha256.h"
 #include "rawframe/composition/composition.h"
@@ -191,6 +192,8 @@ public:
         RAWFRAME_TRY_ASSIGN(messages_, MessageDoors::create(game_, *program_, MessageDoors::Role::Send));
         // And the command lane, by the commands' sizes.
         RAWFRAME_TRY_ASSIGN(commands_, CommandDoors::create(game_, *program_, CommandDoors::Role::Read));
+        // And its queues between systems, by their types' sizes.
+        RAWFRAME_TRY_ASSIGN(queues_, QueueDoors::create(game_, *program_));
         if (planOnly_) {
             // A process that plays the game elsewhere needs what replicates,
             // not the game running here.
@@ -282,7 +285,8 @@ public:
         RAWFRAME_TRY(effects_->addDoors(doors));
         RAWFRAME_TRY(messages_->addDoors(doors));
         RAWFRAME_TRY(commands_->addDoors(doors));
-        staging_ = {messages_.get(), commands_.get()};
+        RAWFRAME_TRY(queues_->addDoors(doors));
+        staging_ = {messages_.get(), commands_.get(), queues_.get()};
         for (const GameEffect& effect : game_.effects) {
             effectClasses_.push_back(effect.effectClass);
         }
@@ -371,6 +375,10 @@ public:
             return {};
         }
         world::World& world = *simulation_->world();
+        // Its queues, empty; a restored World brings its own.
+        for (world::QueueDeclaration& declaration : queues_->declarations()) {
+            RAWFRAME_TRY(world.queues().declare(std::move(declaration)));
+        }
         // Every entity first, so a scene's references have something to
         // name; then each one's components, references written in.
         std::vector<std::vector<world::EntityHandle>> made(game_.spawns.size());
@@ -1059,7 +1067,8 @@ private:
     std::unique_ptr<EffectDoors> effects_;
     std::unique_ptr<MessageDoors> messages_;
     std::unique_ptr<CommandDoors> commands_;
-    std::array<KestStaging*, 2> staging_{};
+    std::unique_ptr<QueueDoors> queues_;
+    std::array<KestStaging*, 3> staging_{};
     std::vector<world_replication::EffectClass> effectClasses_;
     /// Before the systems, so it outlives the machine that calls it.
     GameDebugging debugging_;

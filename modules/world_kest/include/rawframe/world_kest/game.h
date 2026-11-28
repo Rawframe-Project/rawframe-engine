@@ -190,6 +190,10 @@ struct GameSystem {
     /// The effects it emits, from `emits <name>` pairs; only a
     /// predicted system emits, and each effect has one emitter.
     std::vector<std::string> emits;
+    /// The queues it writes and reads, from `writes <queue>` and `reads
+    /// <queue>` pairs; never a predicted system's.
+    std::vector<std::string> writes;
+    std::vector<std::string> reads;
 };
 
 /// Presentation state, from a `presentation <component>... on
@@ -243,6 +247,19 @@ struct GameMessage {
 
 /// Messages a game declares at most.
 inline constexpr std::size_t kMaximumMessages = 64;
+
+/// A queue between a server's systems, from `queue <name> <Kest type> lasts
+/// <ticks> [holds <count>]`: values of the type its writers write and its
+/// readers read, each kept the ticks it lasts, at most `holds` at once.
+struct GameQueue {
+    std::string name;
+    std::string kestType;
+    std::uint32_t lasts = 1;
+    std::uint32_t holds = 1024;
+};
+
+/// Queues a game declares at most.
+inline constexpr std::size_t kMaximumGameQueues = 64;
 
 /// A player's command, from a `command <lower_snake name> <Kest
 /// type>` line: a value of the type a client's sample function sends
@@ -617,6 +634,7 @@ struct GameDescription {
     std::vector<GamePresentation> presentation;
     std::vector<GameEffect> effects;
     std::vector<GameMessage> messages;
+    std::vector<GameQueue> queues;
     std::vector<GameCommand> commands;
     std::vector<GameSpawn> spawns;
     /// Scene documents (rawframe/scene/scene.h) whose entities the World

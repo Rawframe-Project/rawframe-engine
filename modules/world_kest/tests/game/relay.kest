@@ -1,0 +1,51 @@
+module relay
+
+import rawframe.world
+
+struct Sender {
+    unused: u32
+}
+
+struct Ping {
+    tick: u64
+}
+
+// How many pings a reader read, and the tick of the last.
+struct Tally {
+    seen: u32
+    last: u64
+}
+
+extern fn Queue.pings(value: Ping)
+extern fn QueuedCount.pings() -> i32
+extern fn Queued.pings(index: i32) -> Ping
+
+fn send(count: i32, senders: [Sender]) {
+    let i = 0
+    while i < count {
+        Queue.pings(Ping(world.tick()))
+        i = i + 1
+    }
+}
+
+fn tally(count: i32, tallies: [Tally]) {
+    let i = 0
+    while i < count {
+        let k = 0
+        let held = QueuedCount.pings()
+        while k < held {
+            tallies[i].seen = tallies[i].seen + u32(1)
+            tallies[i].last = Queued.pings(k).tick
+            k = k + 1
+        }
+        i = i + 1
+    }
+}
+
+fn late(count: i32, tallies: [Tally]) {
+    tally(count, tallies)
+}
+
+fn early(count: i32, tallies: [Tally]) {
+    tally(count, tallies)
+}

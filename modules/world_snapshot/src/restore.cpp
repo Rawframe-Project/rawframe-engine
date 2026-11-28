@@ -156,6 +156,7 @@ result::Result<std::vector<ChunkHeader>> walkChunks(std::span<const std::byte> a
             (kSubjectless && kChunk.subject != detail::Subject{}) ||
             (kChunk.kind == ChunkKind::RandomStreams && kBefore.kind == ChunkKind::RandomStreams) ||
             (kChunk.kind == ChunkKind::ModSet && kBefore.kind == ChunkKind::ModSet) ||
+            (kChunk.kind == ChunkKind::Queue && kChunk.recordCount != 1) ||
             (kChunk.kind == ChunkKind::ComponentRows && kBefore.kind == ChunkKind::ComponentRows &&
              kChunk.subject < kBefore.subject)) {
             return detail::malformed("the chunks are not in generation 1's order");
@@ -300,6 +301,7 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
     std::uint64_t decoded = 0;
     std::vector<StagedComponent> staged;
     std::vector<StagedStream> streams;
+    std::vector<detail::ReadQueue> queues;
     for (std::size_t index = 1; index + 1 < kChunks.size(); ++index) {
         const ChunkHeader& kChunk = kChunks[index];
         const std::span<const std::byte> kPayload = payloadOf(artifact, kChunk);
@@ -314,7 +316,8 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         // full, so one World has one artifact. A component's group follows
         // how wide its rows are.
         const ChunkHeader& kBefore = kChunks[index - 1];
-        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet;
+        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet &&
+                              kChunk.kind != ChunkKind::Queue;
         std::size_t group = limits.rowsPerChunk;
         if (kChunk.kind == ChunkKind::ComponentRows) {
             const auto kComponent = std::find_if(
@@ -398,6 +401,16 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
                 streams.push_back(std::move(stream));
             }
             break;
+        case ChunkKind::Queue: {
+            std::span<const std::byte> read;
+            static_cast<void>(in.take(kPayload.size(), read));
+            RAWFRAME_TRY_ASSIGN(detail::ReadQueue queue, detail::readQueue(read));
+            if (!queues.empty() && queues.back().declaration.name >= queue.declaration.name) {
+                return detail::malformed("queues are out of order or repeated");
+            }
+            queues.push_back(std::move(queue));
+            break;
+        }
         case ChunkKind::ModSet: {
             // Read and compared before anything else.
             std::span<const std::byte> read;
@@ -463,6 +476,27 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
     }
     for (StagedStream& stream : streams) {
         candidate.restoreRandomStream(std::move(stream.owner), std::move(stream.name), stream.state);
+    }
+    // A queue the candidate declared must be the one the checkpoint holds.
+    for (detail::ReadQueue& queue : queues) {
+        world::MessageQueue* held = candidate.queues().find(queue.declaration.name);
+        if (held == nullptr) {
+            const auto kDeclared = candidate.queues().declare(queue.declaration);
+            if (!kDeclared.has_value()) {
+                return detail::malformed("a queue's declaration is not one a World takes");
+            }
+            held = candidate.queues().find(queue.declaration.name);
+        } else if (held->declaration().valueBytes != queue.declaration.valueBytes ||
+                   held->declaration().lasts != queue.declaration.lasts ||
+                   held->declaration().holds != queue.declaration.holds ||
+                   !std::ranges::is_permutation(held->declaration().readers, queue.declaration.readers)) {
+            return detail::fail(result::ErrorClass::InvalidArgument,
+                                SnapshotError::InvalidCandidate,
+                                "the candidate declares a queue other than the checkpoint holds");
+        }
+        if (!held->restore(std::move(queue.messages), queue.nextSequence, std::move(queue.cursors)).has_value()) {
+            return detail::malformed("a queue's messages or cursors are not consistent");
+        }
     }
     return CheckpointFacts{.tick = world::TickIndex{kHeader.tick},
                            .rate = world::TickRate{.ticks = static_cast<std::uint32_t>(kHeader.rateNumerator),
