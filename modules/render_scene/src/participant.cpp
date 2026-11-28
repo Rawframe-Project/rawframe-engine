@@ -76,6 +76,7 @@ public:
         quality_ = kConfigured.quality;
         renderScale_ = RenderScale{kConfigured.renderScalePercent, kConfigured.leastRenderScalePercent};
         debugChannels_ = kConfigured.debugChannels;
+        debugLayers_ = kConfigured.debugLayers;
         // What the first player's present systems draw to debug the game.
         if (context.has(world_kest::kPresentedDrawings.name)) {
             RAWFRAME_TRY_ASSIGN(drawings_, context.capability(world_kest::kPresentedDrawings));
@@ -606,9 +607,9 @@ private:
             linesChanged = true;
         }
         // And what the preview draws over its scene, kind by kind, each
-        // frame.
+        // frame, or else the debug layers the running game turned on.
         const std::uint8_t kOverlays =
-            preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : 0;
+            preview_ != nullptr && preview_->looking().has_value() ? preview_->overlays() : debugLayers_;
         // An editor's view sees a sky with no picture as a clear day's.
         scene_->gradeSky(preview_ != nullptr && preview_->looking().has_value());
         // And what the game's present systems drew, as it changes.
@@ -706,7 +707,7 @@ private:
                      overlays,
                      scene_->extractedLights(),
                      bodies_,
-                     preview_->looking().has_value() ? preview_->looking()->eye : std::array<double, 3>{},
+                     preview_ != nullptr && preview_->looking().has_value() ? preview_->looking()->eye : camera_.eye,
                      lines_);
         overlayLines_ += lines_.size() - kBefore;
     }
@@ -955,6 +956,7 @@ private:
     const world_kest::PresentedDrawings* drawings_ = nullptr;
     std::uint64_t drawnRevision_ = 0;
     std::uint32_t debugChannels_ = UINT32_MAX;
+    std::uint8_t debugLayers_ = 0;
     std::uint64_t debugLines_ = 0;
     std::uint64_t debugLeftOut_ = 0;
     bool extracted_ = false;

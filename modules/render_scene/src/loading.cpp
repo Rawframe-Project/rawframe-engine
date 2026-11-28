@@ -6,6 +6,7 @@
 #include "rawframe/material/instance.h"
 #include "rawframe/render_scene/errors.h"
 #include "rawframe/render_scene/materials.h"
+#include "rawframe/view/preview.h"
 
 #include <algorithm>
 #include <array>
@@ -214,6 +215,32 @@ result::Result<SceneConfiguration> readConfiguration(const composition::Configur
                                                   .error()};
     }
     read.debugChannels = static_cast<std::uint32_t>(kChannels);
+    // The layers an editor's preview draws, over the running game: words
+    // apart by spaces, each once.
+    const std::string_view kLayers = configuration.text("scene.debug_layers").value_or("");
+    std::size_t at = 0;
+    while (at < kLayers.size()) {
+        const std::size_t kEnd = std::min(kLayers.find(' ', at), kLayers.size());
+        const std::string_view kWord = kLayers.substr(at, kEnd - at);
+        at = kEnd + 1;
+        if (kWord.empty()) {
+            continue;
+        }
+        const std::optional<view::Overlay> kLayer = view::overlayNamed(kWord);
+        if (!kLayer.has_value() || *kLayer == view::Overlay::Ui ||
+            (read.debugLayers & static_cast<std::uint8_t>(*kLayer)) != 0) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             composition::kCompositionDomain,
+                             code(composition::CompositionError::BadConfiguration),
+                             "scene.debug_layers names colliders, lights, and grid, each at most once")
+                    .error()};
+        }
+        read.debugLayers |= static_cast<std::uint8_t>(*kLayer);
+    }
+#if RAWFRAME_SHIPPING
+    read.debugLayers = 0;
+#endif
     return read;
 }
 

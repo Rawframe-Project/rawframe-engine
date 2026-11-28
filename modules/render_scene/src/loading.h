@@ -41,6 +41,9 @@ struct SceneConfiguration {
     std::uint32_t leastRenderScalePercent = 100;
     /// The `rawframe.debug` channels drawn, bit n for channel n.
     std::uint32_t debugChannels = UINT32_MAX;
+    /// The debug layers drawn over the running game, `view::Overlay`
+    /// bits (colliders, lights, grid); none in a shipping build.
+    std::uint8_t debugLayers = 0;
 };
 
 /// Reads every `scene.*` key, refusing one out of its bounds.
