@@ -62,6 +62,15 @@ Creating, destroying, inserting and removing take effect at the next barrier, af
 
 Never use a clock or the platform for anything that decides gameplay. Draw from a World random stream the system declares: the same seed and inputs give the same draws on every machine, so a server, a checkpoint restore and a predicting client agree. A predicted system may not draw from a World stream.
 
+## Timers
+
+Declare a component of `rawframe.timer`'s types and the engine counts it, in ticks, before the simulation phase of every tick the World runs:
+
+- **`Lifespan`** (`ticks`): the entity lasts that many more ticks and is destroyed at the end of the last. A query finds what is pending; removing the component cancels it.
+- **`Timer`** (`left`, `period`, `fired`): `fired` is true on the tick `left` reaches nought, for the simulation phase's systems, and the count starts again from `period`, or stops without one. `timer.after(ticks)` and `timer.every(ticks)` make one.
+
+The counts are component data, so a checkpoint keeps them and a paused World does not count.
+
 ## Limits
 
 Each system has a fuel budget per tick (`kest.fuel_per_system`) and the program a heap (`kest.heap_bytes`). A system that exhausts its fuel is stopped for the tick and changes nothing; the server logs it and goes on.

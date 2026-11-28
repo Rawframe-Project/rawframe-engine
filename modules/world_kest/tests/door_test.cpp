@@ -15,6 +15,7 @@
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -140,5 +141,35 @@ RAWFRAME_TEST(LookupsOfWhatIsNotThereAnswerWithoutHarm) {
             std::memcpy(seen.data(), chunk.columns[0], sizeof seen);
         });
         RAWFRAME_EXPECT(seen[0] == 14 && seen[1] == 3 && seen[2] == 21);
+    });
+}
+
+RAWFRAME_TEST(LifespansEndAndTimersFireAsTheEngineCountsThem) {
+    play("fuse.game", 7, [](world::World& world) {
+        // Lifespans of two and five ticks are both spent, their entities
+        // gone; the lamps are left.
+        const auto kLife = schema::ComponentTypeId::fromText("ca6ab7bf-286c-4b1f-b99d-a206b78927f8");
+        const auto kBlink = schema::ComponentTypeId::fromText("a3977daa-795c-4b87-90ac-ffee606220e7");
+        const auto kCount = schema::ComponentTypeId::fromText("50918e2c-1773-45a7-8f31-c144f1b15ef4");
+        RAWFRAME_EXPECT(holding(world, kLife).empty() && world.entityCount() == 2);
+        struct Timer {
+            std::uint32_t left;
+            std::uint32_t period;
+            bool fired;
+        };
+        // The lamp of period three fired on ticks three and six and has two
+        // to go; the lamp of four fired once and stopped. Neither fired on
+        // the seventh, and the simulation phase saw every firing.
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> seen;
+        for (const world::EntityHandle kLamp : holding(world, kBlink)) {
+            const Timer* const kTimer = valueOf<Timer>(world, kLamp, kBlink);
+            const auto* const kFired = valueOf<std::uint32_t>(world, kLamp, kCount);
+            RAWFRAME_EXPECT(kTimer != nullptr && kFired != nullptr && !kTimer->fired);
+            if (kTimer != nullptr && kFired != nullptr) {
+                seen.emplace_back(kTimer->left, *kFired);
+            }
+        }
+        std::ranges::sort(seen);
+        RAWFRAME_EXPECT(seen == (std::vector<std::pair<std::uint32_t, std::uint32_t>>{{0, 1}, {2, 2}}));
     });
 }

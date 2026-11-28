@@ -1,0 +1,14 @@
+# Fuses that burn out and lamps that blink: the engine's lifespans and
+# timers counted, and a system of the simulation phase seeing each firing.
+program fuse.kest
+
+component ca6ab7bf-286c-4b1f-b99d-a206b78927f8 fuse.life rawframe.timer.Lifespan
+component a3977daa-795c-4b87-90ac-ffee606220e7 fuse.blink rawframe.timer.Timer
+component 50918e2c-1773-45a7-8f31-c144f1b15ef4 fuse.count Count
+
+system fuse.tally simulation tally read fuse.blink write fuse.count
+
+spawn 1 fuse.life ticks=2
+spawn 1 fuse.life ticks=5
+spawn 1 fuse.blink left=3 period=3 fuse.count
+spawn 1 fuse.blink left=4 fuse.count
