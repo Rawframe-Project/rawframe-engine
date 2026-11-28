@@ -234,7 +234,10 @@ struct Character2D {
 /// body again, makes it again. Past `breakForce` newtons or `breakTorque`
 /// newton meters of reaction (nought: never) it breaks: the step writes
 /// `broken`, and a broken joint stays unmade until gameplay writes `broken`
-/// false.
+/// false. All this is the generic kind; `kind` (physics::JointKind) makes it
+/// a distance joint (a rope, a rod, a spring), a wheel (its suspension along
+/// `axis`), a pulley, or a gear instead, between the same anchors. A
+/// hinge's spring pulls its angle back to where it was made.
 struct Joint2D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("217eaf04-507b-4d94-b363-2c8bf99f4174");
@@ -267,6 +270,18 @@ struct Joint2D {
     /// Whether the two bodies still collide with each other.
     bool collideConnected = false;
     bool broken = false;
+    /// physics::JointKind, and what the kinds other than generic read.
+    std::uint8_t kind = 0;
+    float minLength = 0;
+    float maxLength = 0;
+    float springHertz = 0;
+    float springDampingRatio = 0;
+    float springLength = 0;
+    float ratio = 0;
+    double groundAX = 0;
+    double groundAY = 0;
+    double groundBX = 0;
+    double groundBY = 0;
 };
 
 /// physics3d's Attach3D in two dimensions: an entity with an Attach2D and a

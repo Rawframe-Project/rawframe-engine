@@ -1050,6 +1050,123 @@ RAWFRAME_TEST(AJointBreaksPastItsLimitAndWaitsToBeMended) {
     RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 2 && !held.broken);
 }
 
+RAWFRAME_TEST(ARodARopeAndASpringHoldWhatHangsFromThem) {
+    constexpr auto kDistance = static_cast<std::uint8_t>(physics::JointKind::Distance);
+    const auto kHang = [](const Pose2D& start, const Joint2D& made) {
+        Scene scene;
+        const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+        const world::EntityHandle kBob = scene.body(kBall, start);
+        Joint2D held = made;
+        held.a = kPost;
+        held.b = kBob;
+        static_cast<void>(joint(scene, held));
+        double farthest = 0;
+        for (int tick = 0; tick < 240; ++tick) {
+            scene.run(1);
+            farthest = std::max(farthest, distance(scene.pose(kBob), 0, 5));
+        }
+        RAWFRAME_EXPECT(scene.physics->statistics().jointsMade == 1);
+        return std::pair{distance(scene.pose(kBob), 0, 5), farthest};
+    };
+    // A rod half a meter long holds the bob out level as it swings.
+    const auto [kRod, kRodFarthest] =
+        kHang({.x = 0.5, .y = 5}, {.kind = kDistance, .minLength = 0.5F, .maxLength = 0.5F});
+    RAWFRAME_EXPECT(std::abs(kRod - 0.5) < 0.01 && kRodFarthest < 0.51);
+    // A rope of a meter lets it fall from half a meter, then holds it.
+    const auto [kRope, kRopeFarthest] = kHang({.y = 4.5}, {.kind = kDistance, .maxLength = 1});
+    RAWFRAME_EXPECT(std::abs(kRope - 1) < 0.02 && kRopeFarthest < 1.03);
+    // A spring toward a meter holds it a little past that, inside its range.
+    const auto [kSpring, kSpringFarthest] = kHang(
+        {.y = 4}, {.kind = kDistance, .maxLength = 3, .springHertz = 2, .springDampingRatio = 1, .springLength = 1});
+    RAWFRAME_EXPECT(kSpring > 1.005 && kSpring < 1.1 && kSpringFarthest < 1.2);
+}
+
+RAWFRAME_TEST(APulleyTradesOneSideForTheOther) {
+    Scene scene;
+    Body2D heavy = kCrate;
+    heavy.density = 2;
+    const world::EntityHandle kHeavy = scene.body(heavy, {.x = -1, .y = 3});
+    const world::EntityHandle kLight = scene.body(kCrate, {.x = 1, .y = 3});
+    static_cast<void>(joint(scene,
+                            Joint2D{.a = kHeavy,
+                                    .b = kLight,
+                                    .kind = static_cast<std::uint8_t>(physics::JointKind::Pulley),
+                                    .ratio = 1,
+                                    .groundAX = -1,
+                                    .groundAY = 5,
+                                    .groundBX = 1,
+                                    .groundBY = 5}));
+    scene.run(60);
+    const double kHeavyY = scene.pose(kHeavy).y;
+    const double kLightY = scene.pose(kLight).y;
+    RAWFRAME_EXPECT(kHeavyY < 3 - 0.2 && kLightY > 3 + 0.2);
+    RAWFRAME_EXPECT(std::abs(((5 - kHeavyY) + (5 - kLightY)) - 4) < 0.02);
+}
+
+RAWFRAME_TEST(AGearTurnsItsMateAndAWheelRollsOnItsSpring) {
+    Scene scene{{.gravityY = 0}};
+    const world::EntityHandle kFrame = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kDriver = scene.body(kCrate, {.x = -1, .y = 5});
+    const world::EntityHandle kDriven = scene.body(kCrate, {.x = 1, .y = 5});
+    Joint2D driving{.a = kFrame, .b = kDriver, .anchorAX = -1, .motorSpeed = 2, .motorEffort = 1000};
+    driving.angular = kFree;
+    driving.motor = 3;
+    static_cast<void>(joint(scene, driving));
+    Joint2D driven{.a = kFrame, .b = kDriven, .anchorAX = 1};
+    driven.angular = kFree;
+    static_cast<void>(joint(scene, driven));
+    // Meshed: the driven cog turns the other way, as fast with a ratio of 1.
+    static_cast<void>(joint(
+        scene,
+        Joint2D{.a = kDriver, .b = kDriven, .kind = static_cast<std::uint8_t>(physics::JointKind::Gear), .ratio = 1}));
+    scene.run(60);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kDriver).angular - 2) < 0.05);
+    RAWFRAME_EXPECT(std::abs(scene.velocity(kDriven).angular + 2) < 0.05);
+
+    // A wheel below a fixed chassis: its spring holds it under gravity's sag,
+    // and its motor spins it.
+    Scene car;
+    const world::EntityHandle kChassis = car.body(kPostBody, {.y = 5});
+    const world::EntityHandle kWheel = car.body(kBall, {.y = 4.5});
+    static_cast<void>(joint(car,
+                            Joint2D{.a = kChassis,
+                                    .b = kWheel,
+                                    .anchorAY = -0.5F,
+                                    .axisY = 1,
+                                    .motorSpeed = 3,
+                                    .motorEffort = 100,
+                                    .motor = 3,
+                                    .kind = static_cast<std::uint8_t>(physics::JointKind::Wheel),
+                                    .minLength = -0.3F,
+                                    .maxLength = 0.3F,
+                                    .springHertz = 4,
+                                    .springDampingRatio = 1}));
+    car.run(120);
+    const double kSag = 10 / ((2 * std::numbers::pi * 4) * (2 * std::numbers::pi * 4));
+    RAWFRAME_EXPECT(std::abs(car.pose(kWheel).y - (4.5 - kSag)) < 0.02 && std::abs(car.pose(kWheel).x) < 0.01);
+    RAWFRAME_EXPECT(std::abs(car.velocity(kWheel).angular) > 2.5F);
+    RAWFRAME_EXPECT(car.physics->statistics().jointsMade == 1);
+
+    // A kind there is none of is refused.
+    static_cast<void>(joint(car, Joint2D{.a = kChassis, .b = kWheel, .kind = 9}));
+    car.run(1);
+    RAWFRAME_EXPECT(car.physics->statistics().jointsRefused == 1);
+}
+
+RAWFRAME_TEST(AHingesSpringPullsItBackToWhereItWasMade) {
+    Scene scene;
+    const world::EntityHandle kPost = scene.body(kPostBody, {.y = 5});
+    const world::EntityHandle kSprung = scene.body(kBar, {.x = 0.5, .y = 5});
+    Joint2D hinge = heldAtItsEnd(kPost, kSprung);
+    hinge.angular = kFree;
+    hinge.springHertz = 3;
+    hinge.springDampingRatio = 1;
+    static_cast<void>(joint(scene, hinge));
+    scene.run(120);
+    // Gravity bends it down a little; the spring holds it near level.
+    RAWFRAME_EXPECT(scene.pose(kSprung).y > 4.8 && scene.pose(kSprung).x > 0.45);
+}
+
 RAWFRAME_TEST(AttachedEntitiesFollowTheirParents) {
     Scene scene{{.gravityY = 0}};
     // A body turning a quarter turn a second, moving along x.

@@ -259,7 +259,11 @@ struct Mesh3D {
 /// either body, makes it again. Past `breakForce` newtons or `breakTorque`
 /// newton meters of reaction (nought: never) it breaks: the step writes
 /// `broken`, and a broken joint stays unmade until gameplay writes `broken`
-/// false.
+/// false. All this is the generic kind; `kind` (physics::JointKind) makes it
+/// a distance joint (a rope, a rod, a spring), a wheel, a pulley, or a gear
+/// instead, each between the same anchors and axes (a wheel's suspension
+/// along `axisA`, its axle along `axisB`; a gear's spins about them). The
+/// generic kind has no spring yet.
 struct Joint3D {
     static constexpr schema::ComponentTypeId kComponentTypeId =
         schema::ComponentTypeId::fromText("963bf147-4afe-4047-9b33-bdf528bf026a");
@@ -307,6 +311,20 @@ struct Joint3D {
     /// Whether the two bodies still collide with each other.
     bool collideConnected = false;
     bool broken = false;
+    /// physics::JointKind, and what the kinds other than generic read.
+    std::uint8_t kind = 0;
+    float minLength = 0;
+    float maxLength = 0;
+    float springHertz = 0;
+    float springDampingRatio = 0;
+    float springLength = 0;
+    float ratio = 0;
+    double groundAX = 0;
+    double groundAY = 0;
+    double groundAZ = 0;
+    double groundBX = 0;
+    double groundBY = 0;
+    double groundBZ = 0;
 };
 
 /// A typed relation: an entity with an Attach3D and a Pose3D

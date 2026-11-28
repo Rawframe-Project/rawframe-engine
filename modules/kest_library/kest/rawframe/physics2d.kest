@@ -191,7 +191,28 @@ struct Joint2D {
     // Whether the two bodies still collide with each other.
     collideConnected: bool
     broken: bool
+    // GENERIC, DISTANCE, WHEEL, PULLEY, or GEAR, and what the kinds other
+    // than GENERIC read.
+    kind: u8
+    minLength: f32
+    maxLength: f32
+    springHertz: f32
+    springDampingRatio: f32
+    springLength: f32
+    ratio: f32
+    groundAX: f64
+    groundAY: f64
+    groundBX: f64
+    groundBY: f64
 }
+
+// Joint2D.kind: what kind of joint it is. GENERIC holds each axis locked,
+// free, or limited; the others read the fields named in their helpers below.
+const GENERIC: u8 = 0
+const DISTANCE: u8 = 1
+const WHEEL: u8 = 2
+const PULLEY: u8 = 3
+const GEAR: u8 = 4
 
 // Follows `parent`: after every step the engine puts this entity's Pose2D
 // at the parent's pose with this offset, in the parent's frame (a rotation,
@@ -215,7 +236,8 @@ struct Tiles2D {
 // Welds `b` to `a` where they are: every axis locked.
 fn fixed(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2) -> Joint2D {
     return Joint2D(a, b, anchorA.x, anchorA.y, anchorB.x, anchorB.y, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                   0.0, 0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, NO_MOTOR, false, false)
+                   0.0, 0.0, 0.0, 0.0, LOCKED, LOCKED, LOCKED, NO_MOTOR, false, false, GENERIC, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 }
 
 // Turns about the anchors: a door, a wheel on its axle.
@@ -231,6 +253,77 @@ fn slider(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, axis: 
     joint.axisX = axis.x
     joint.axisY = axis.y
     joint.linearX = FREE
+    return joint
+}
+
+// Keeps the anchors no more than `length` apart and lets them come closer: a
+// rope, a chain, a leash.
+fn rope(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, length: f32) -> Joint2D {
+    let joint = fixed(a, b, anchorA, anchorB)
+    joint.kind = DISTANCE
+    joint.maxLength = length
+    return joint
+}
+
+// Keeps the anchors exactly `length` apart, turning freely about both: a rod,
+// a pendulum's arm.
+fn rod(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, length: f32) -> Joint2D {
+    let joint = rope(a, b, anchorA, anchorB, length)
+    joint.minLength = length
+    return joint
+}
+
+// Pulls the anchors toward `length` apart at `hertz`, damped by
+// `dampingRatio` (1 settles without bouncing), from nought to twice that
+// length: a bungee, a car's strut, a bouncy lamp.
+fn spring(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, length: f32, hertz: f32,
+          dampingRatio: f32) -> Joint2D {
+    let joint = rope(a, b, anchorA, anchorB, length * 2.0)
+    joint.springHertz = hertz
+    joint.springDampingRatio = dampingRatio
+    joint.springLength = length
+    return joint
+}
+
+// A wheel `b` on a chassis `a`: it rides `suspension` (in a's frame) on a
+// spring at `hertz` back toward where it was made, `travel` either way, and
+// spins freely, or by the motor.
+fn wheel(a: world.Entity, b: world.Entity, anchorA: vec2, suspension: vec2, travel: f32, hertz: f32,
+         dampingRatio: f32) -> Joint2D {
+    let joint = fixed(a, b, anchorA, vec2(0.0, 0.0))
+    joint.kind = WHEEL
+    joint.axisX = suspension.x
+    joint.axisY = suspension.y
+    joint.minLength = 0.0 - travel
+    joint.maxLength = travel
+    joint.springHertz = hertz
+    joint.springDampingRatio = dampingRatio
+    return joint
+}
+
+// A rope from each anchor up over a fixed point in the world, `groundA` and
+// `groundB`: as one side lowers, the other rises by `ratio` times less (a
+// block and tackle at 2).
+fn pulley(a: world.Entity, b: world.Entity, anchorA: vec2, anchorB: vec2, groundAX: f64, groundAY: f64,
+          groundBX: f64, groundBY: f64, ratio: f32) -> Joint2D {
+    let joint = fixed(a, b, anchorA, anchorB)
+    joint.kind = PULLEY
+    joint.ratio = ratio
+    joint.groundAX = groundAX
+    joint.groundAY = groundAY
+    joint.groundBX = groundBX
+    joint.groundBY = groundBY
+    return joint
+}
+
+// Couples two cogs' turns: a's angle plus `ratio` times b's stays as made,
+// so a positive ratio meshes them turning opposite ways and a negative one
+// is a belt. Both must turn on hinges to one common frame, a chassis or the
+// ground; the gear holds nothing else.
+fn gear(a: world.Entity, b: world.Entity, ratio: f32) -> Joint2D {
+    let joint = fixed(a, b, vec2(0.0, 0.0), vec2(0.0, 0.0))
+    joint.kind = GEAR
+    joint.ratio = ratio
     return joint
 }
 

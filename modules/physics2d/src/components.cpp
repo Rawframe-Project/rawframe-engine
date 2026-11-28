@@ -118,7 +118,7 @@ constexpr ComponentLayout layoutOf(std::string_view scriptType, std::span<const 
                            .fields = fields};
 }
 
-constexpr std::array<ComponentField, 26> kJointFields = {{
+constexpr std::array<ComponentField, 37> kJointFields = {{
     {"a.slot", offsetof(Joint2D, a) + offsetof(world::EntityHandle, slot), FieldType::U32},
     {"a.generation", offsetof(Joint2D, a) + offsetof(world::EntityHandle, generation), FieldType::U32},
     {"b.slot", offsetof(Joint2D, b) + offsetof(world::EntityHandle, slot), FieldType::U32},
@@ -145,6 +145,17 @@ constexpr std::array<ComponentField, 26> kJointFields = {{
     {"motor", offsetof(Joint2D, motor), FieldType::U8},
     {"collideConnected", offsetof(Joint2D, collideConnected), FieldType::Bool},
     {"broken", offsetof(Joint2D, broken), FieldType::Bool},
+    {"kind", offsetof(Joint2D, kind), FieldType::U8},
+    {"minLength", offsetof(Joint2D, minLength), FieldType::F32},
+    {"maxLength", offsetof(Joint2D, maxLength), FieldType::F32},
+    {"springHertz", offsetof(Joint2D, springHertz), FieldType::F32},
+    {"springDampingRatio", offsetof(Joint2D, springDampingRatio), FieldType::F32},
+    {"springLength", offsetof(Joint2D, springLength), FieldType::F32},
+    {"ratio", offsetof(Joint2D, ratio), FieldType::F32},
+    {"groundAX", offsetof(Joint2D, groundAX), FieldType::F64},
+    {"groundAY", offsetof(Joint2D, groundAY), FieldType::F64},
+    {"groundBX", offsetof(Joint2D, groundBX), FieldType::F64},
+    {"groundBY", offsetof(Joint2D, groundBY), FieldType::F64},
 }};
 
 constexpr std::array<ComponentField, 6> kAttachFields = {{
