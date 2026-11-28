@@ -1,11 +1,14 @@
 module rawframe.random
 
+import std.math
+
 // Draws from the World's random streams. A system names the
 // streams it draws from where it is declared; `stream` is a place in that
 // list, from nought. Each stream is derived from the World's root seed, the
 // system, and the stream's name, so a run with one seed draws the same.
 
 extern fn Random.below(stream: i32, bound: u32) -> u32
+extern fn Random.below64(stream: i32, bound: u64) -> u64
 extern fn Random.unit(stream: i32) -> f64
 
 // A whole number from nought up to but not including `bound`, which is not
@@ -14,7 +17,97 @@ fn below(stream: i32, bound: u32) -> u32 {
     return Random.below(stream, bound)
 }
 
+// The same for a bound of 64 bits.
+fn below64(stream: i32, bound: u64) -> u64 {
+    return Random.below64(stream, bound)
+}
+
 // A real from nought up to but not including one.
 fn unit(stream: i32) -> f64 {
     return Random.unit(stream)
+}
+
+// A place of `weights`, each drawn as often as its weight is of their
+// total, with one draw: the engine's own weighted choice, so the same
+// stream picks the same place in Kest and in the engine. None when every
+// weight is nought, or when their total does not fit in 64 bits.
+fn weighted(stream: i32, weights: [u64]) -> i32? {
+    let total: u64 = 0
+    for weight in weights {
+        if total + weight < total {
+            return none
+        }
+        total += weight
+    }
+    if total == 0 {
+        return none
+    }
+    let pick = Random.below64(stream, total)
+    for place, weight in weights {
+        if pick < weight {
+            return place
+        }
+        pick -= weight
+    }
+    return none
+}
+
+// Every order of `values` as likely as any other, in place: the engine's
+// own shuffle, drawing once for each place but the first.
+fn shuffle<T>(stream: i32, values: [T]) {
+    let place = len(values)
+    while place > 1 {
+        let pick = i32(Random.below(stream, u32(place)))
+        place -= 1
+        let held = values[place]
+        values[place] = values[pick]
+        values[pick] = held
+    }
+}
+
+// The whole turn, for the shapes below.
+const TURN: f64 = 6.283185307179586
+
+// A direction in the plane, every one as likely: one draw.
+fn onCircle(stream: i32) -> vec2 {
+    let angle = TURN * Random.unit(stream)
+    return vec2(f32(math.cos(angle)), f32(math.sin(angle)))
+}
+
+// A point in the disk of radius one, every place as likely: two draws.
+fn inDisk(stream: i32) -> vec2 {
+    let radius = math.sqrt(Random.unit(stream))
+    let angle = TURN * Random.unit(stream)
+    return vec2(f32(radius * math.cos(angle)), f32(radius * math.sin(angle)))
+}
+
+// A direction in space, every one as likely: two draws, a height and a
+// turn about it, since a sphere's area is even over its height.
+fn onSphere(stream: i32) -> vec3 {
+    let z = 2.0 * Random.unit(stream) - 1.0
+    let angle = TURN * Random.unit(stream)
+    let ring = math.sqrt(1.0 - z * z)
+    return vec3(f32(ring * math.cos(angle)), f32(ring * math.sin(angle)), f32(z))
+}
+
+// A point in the triangle `a`, `b`, `c`, every place as likely: two draws,
+// a pair past the far edge folded back inside.
+fn inTriangle(stream: i32, a: vec2, b: vec2, c: vec2) -> vec2 {
+    let s = Random.unit(stream)
+    let t = Random.unit(stream)
+    if s + t > 1.0 {
+        s = 1.0 - s
+        t = 1.0 - t
+    }
+    return a + (b - a) * f32(s) + (c - a) * f32(t)
+}
+
+fn inTriangle(stream: i32, a: vec3, b: vec3, c: vec3) -> vec3 {
+    let s = Random.unit(stream)
+    let t = Random.unit(stream)
+    if s + t > 1.0 {
+        s = 1.0 - s
+        t = 1.0 - t
+    }
+    return a + (b - a) * f32(s) + (c - a) * f32(t)
 }

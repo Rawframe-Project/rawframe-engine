@@ -45,6 +45,7 @@ namespace {
 
 // What the doors take and give, as they are offered.
 constexpr std::array<kest::Parameter, 2> kStreamAndBound = {kest::Slot::I32, kest::Slot::U32};
+constexpr std::array<kest::Parameter, 2> kStreamAndWideBound = {kest::Slot::I32, kest::Slot::U64};
 constexpr std::array<kest::Parameter, 1> kStream = {kest::Slot::I32};
 constexpr std::array<kest::Parameter, 1> kU32 = {kest::Slot::U32};
 constexpr std::array<kest::Parameter, 1> kU64 = {kest::Slot::U64};
@@ -511,6 +512,11 @@ result::Result<std::unique_ptr<KestSystems>> KestSystems::create(KestSystemsSett
                                       .context = doorway.get(),
                                       .takes = kStreamAndBound,
                                       .gives = kU32}));
+    RAWFRAME_TRY(doors.add(kest::Door{.name = "Random.below64",
+                                      .function = &below64Door,
+                                      .context = doorway.get(),
+                                      .takes = kStreamAndWideBound,
+                                      .gives = kU64}));
     RAWFRAME_TRY(doors.add(kest::Door{
         .name = "Random.unit", .function = &unitDoor, .context = doorway.get(), .takes = kStream, .gives = kF64}));
     for (Doorway::Component& component : doorway->components) {

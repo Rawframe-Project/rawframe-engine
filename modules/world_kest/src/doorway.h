@@ -123,6 +123,7 @@ void spawnDoor(kest::DoorCall& call, void* context) noexcept;
 void destroyDoor(kest::DoorCall& call, void* context) noexcept;
 void tickDoor(kest::DoorCall& call, void* context) noexcept;
 void belowDoor(kest::DoorCall& call, void* context) noexcept;
+void below64Door(kest::DoorCall& call, void* context) noexcept;
 void unitDoor(kest::DoorCall& call, void* context) noexcept;
 void insertDoor(kest::DoorCall& call, void* context) noexcept;
 void removeDoor(kest::DoorCall& call, void* context) noexcept;

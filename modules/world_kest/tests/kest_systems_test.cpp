@@ -2,13 +2,17 @@
 // land only when every call succeeds, and shapes checked before anything runs.
 
 #include "rawframe/kest/errors.h"
+#include "rawframe/kest_library/library.h"
 #include "rawframe/test/test.h"
 #include "rawframe/world/query.h"
+#include "rawframe/world/random.h"
 #include "rawframe/world_kest/errors.h"
 #include "rawframe/world_kest/kest_systems.h"
 
 #include <array>
+#include <cstdint>
 #include <cstdio>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -452,6 +456,14 @@ RAWFRAME_TEST(ATicksOperationsAreBoundedAcrossItsSystems) {
 
 namespace {
 
+/// The doors of Kest's `std.math`, which `rawframe.random` draws its shapes
+/// with, as a game's table holds them.
+kest::DoorTable mathDoors() {
+    kest::DoorTable doors;
+    RAWFRAME_EXPECT(kest::addStandardMath(doors).has_value());
+    return doors;
+}
+
 constexpr std::string_view kDice = "module dice\n"
                                    "\n"
                                    "import rawframe.random\n"
@@ -484,11 +496,8 @@ constexpr auto kDieId = schema::ComponentTypeId::fromText("b83e5f21-7d49-4c0a-a6
 /// Rolls three dice for five ticks under `seed` and returns every face and
 /// spin, or nothing when a tick reports a failure.
 std::vector<Die> roll(std::uint64_t seed, std::string_view entry) {
-    const std::array<kest::SourceFile, 2> kFiles = {
-        kest::SourceFile{.path = "dice.kest", .text = std::string{kDice}},
-        kest::SourceFile{.path = "rawframe/random.kest",
-                         .text = readText(std::string{RAWFRAME_WORLD_KEST_MODULES} + "rawframe/random.kest")}};
-    auto compiled = kest::Program::compile(kFiles, {});
+    const std::array<kest::SourceFile, 1> kFiles = {kest::SourceFile{.path = "dice.kest", .text = std::string{kDice}}};
+    auto compiled = kest_library::compile("dice.kest", kFiles, {});
     RAWFRAME_EXPECT(compiled.has_value());
     schema::RegistryBuilder builder;
     builder.add(schema::ComponentDescriptor{
@@ -506,7 +515,8 @@ std::vector<Die> roll(std::uint64_t seed, std::string_view entry) {
     constexpr std::array<std::string_view, 2> kStreams = {"faces", "spins"};
     const std::array<KestSystemDeclaration, 1> kDeclarations = {KestSystemDeclaration{
         .identity = "dice.roll", .entry = entry, .columns = kDieColumns, .randomStreams = kStreams}};
-    auto kest = KestSystems::create({.program = *compiled, .limits = kLimits, .systems = kDeclarations});
+    auto kest =
+        KestSystems::create({.program = *compiled, .doors = mathDoors(), .limits = kLimits, .systems = kDeclarations});
     RAWFRAME_EXPECT(kest.has_value());
     world::Schedule ticks = schedule(**kest, *kRegistry);
     world::TickIndex tick;
@@ -545,6 +555,137 @@ RAWFRAME_TEST(KestSystemsDrawFromTheWorldsStreams) {
     RAWFRAME_EXPECT(same && differs && inRange);
     // A stream the system did not declare fails the system.
     RAWFRAME_EXPECT(roll(1234, "cheat").empty());
+}
+
+namespace {
+
+constexpr std::string_view kDraws =
+    "module draws\n"
+    "\n"
+    "import rawframe.random\n"
+    "\n"
+    "struct Draw {\n"
+    "    pick: i32\n"
+    "    order: u32\n"
+    "    refused: u32\n"
+    "    sphere: f32\n"
+    "    disk: f32\n"
+    "    inside: u32\n"
+    "}\n"
+    "\n"
+    "fn draw(count: i32, draws: [Draw]) {\n"
+    "    let weights: [u64] = [3, 0, 5, 1, 7]\n"
+    "    let order: [u32] = [0, 1, 2, 3, 4, 5, 6, 7]\n"
+    "    let zeros: [u64] = [0, 0]\n"
+    "    let past: [u64] = [0xffffffffffffffff, 2]\n"
+    "    let i = 0\n"
+    "    while i < count {\n"
+    "        draws[i].pick = -1\n"
+    "        if let pick = random.weighted(0, weights) {\n"
+    "            draws[i].pick = pick\n"
+    "        }\n"
+    "        random.shuffle(0, order)\n"
+    "        let packed: u32 = 0\n"
+    "        for place, value in order {\n"
+    "            packed = packed | (value << u32(4 * place))\n"
+    "        }\n"
+    "        draws[i].order = packed\n"
+    "        if random.weighted(0, zeros) == none && random.weighted(0, past) == none {\n"
+    "            draws[i].refused = 1\n"
+    "        }\n"
+    "        let s = random.onSphere(1)\n"
+    "        draws[i].sphere = s.x * s.x + s.y * s.y + s.z * s.z\n"
+    "        let d = random.inDisk(1)\n"
+    "        draws[i].disk = d.x * d.x + d.y * d.y\n"
+    "        let t = random.inTriangle(1, vec2(0.0, 0.0), vec2(4.0, 0.0), vec2(0.0, 2.0))\n"
+    "        if t.x >= 0.0 && t.y >= 0.0 && t.x * 0.5 + t.y <= 2.0 {\n"
+    "            draws[i].inside = 1\n"
+    "        }\n"
+    "        i = i + 1\n"
+    "    }\n"
+    "}\n";
+
+struct Draw {
+    std::int32_t pick;
+    std::uint32_t order;
+    std::uint32_t refused;
+    float sphere;
+    float disk;
+    std::uint32_t inside;
+};
+
+constexpr auto kDrawId = schema::ComponentTypeId::fromText("4e0b7c1d-93a2-4f58-b6e1-0c7d2a9f8e34");
+
+} // namespace
+
+RAWFRAME_TEST(KestWeightedChoiceAndShuffleDrawAsTheEngineDoes) {
+    constexpr std::uint64_t kSeed = 99;
+    const std::array<kest::SourceFile, 1> kFiles = {
+        kest::SourceFile{.path = "draws.kest", .text = std::string{kDraws}}};
+    std::string report;
+    auto compiled = kest_library::compile("draws.kest", kFiles, {}, &report);
+    if (!compiled.has_value()) {
+        std::fprintf(stderr, "%s\n", report.c_str());
+    }
+    RAWFRAME_EXPECT(compiled.has_value());
+    if (!compiled.has_value()) {
+        return;
+    }
+    schema::RegistryBuilder builder;
+    builder.add(schema::ComponentDescriptor{
+        .id = kDrawId, .name = "test.draw", .size = sizeof(Draw), .alignment = 4, .plainData = true, .operations = {}});
+    const auto kRegistry = *builder.freeze();
+    world::World world{kRegistry, world::WorldSettings{.rootSeed = world::RootSeed{kSeed}}};
+    const auto kDraw = *kRegistry->find(kDrawId);
+    for (int index = 0; index < 4; ++index) {
+        Draw draw{};
+        const world::EntityHandle kEntity = *world.create();
+        RAWFRAME_EXPECT(world.insertErased(kEntity, kDraw, &draw).has_value());
+    }
+    constexpr std::array<KestColumn, 1> kColumns = {
+        KestColumn{.component = kDrawId, .element = "Draw", .access = world::Access::Write}};
+    constexpr std::array<std::string_view, 2> kStreams = {"choices", "shapes"};
+    const std::array<KestSystemDeclaration, 1> kDeclarations = {KestSystemDeclaration{
+        .identity = "draws.draw", .entry = "draw", .columns = kColumns, .randomStreams = kStreams}};
+    auto kest =
+        KestSystems::create({.program = *compiled, .doors = mathDoors(), .limits = kLimits, .systems = kDeclarations});
+    RAWFRAME_EXPECT(kest.has_value());
+    if (!kest.has_value()) {
+        return;
+    }
+    world::Schedule ticks = schedule(**kest, *kRegistry);
+    world::TickIndex tick;
+    auto ran = ticks.runTick(world, tick, *world::TickRate::of(60));
+    RAWFRAME_EXPECT(ran.has_value() && ran->failures.empty());
+    std::vector<Draw> seen;
+    const auto kQuery = std::array<world::ColumnTerm, 1>{world::ColumnTerm{kDraw, world::Access::Read}};
+    auto query = world::ColumnQuery::resolve(kQuery, *kRegistry);
+    query->forEachChunk(world, [&seen](const world::ColumnChunk& chunk) {
+        const auto* values = reinterpret_cast<const Draw*>(chunk.columns[0]);
+        seen.insert(seen.end(), values, values + chunk.entities.size());
+    });
+    RAWFRAME_EXPECT(seen.size() == 4);
+    // The engine's own choice and shuffle over the same stream give the same
+    // places, and leave the stream where the program left it: a refused
+    // choice draws nothing.
+    world::Pcg32 choices = world::deriveStream(world::RootSeed{kSeed}, "draws.draw", "choices");
+    constexpr std::array<std::uint64_t, 5> kWeights = {3, 0, 5, 1, 7};
+    std::array<std::uint32_t, 8> order = {0, 1, 2, 3, 4, 5, 6, 7};
+    for (const Draw& draw : seen) {
+        const std::size_t kPick = world::weightedChoice(kWeights, choices);
+        world::shuffle(std::span<std::uint32_t>{order}, choices);
+        std::uint32_t packed = 0;
+        for (std::size_t place = 0; place < order.size(); ++place) {
+            packed |= order[place] << (4U * place);
+        }
+        RAWFRAME_EXPECT(draw.pick == static_cast<std::int32_t>(kPick) && kPick != 1);
+        RAWFRAME_EXPECT(draw.order == packed);
+        RAWFRAME_EXPECT(draw.refused == 1);
+        RAWFRAME_EXPECT(draw.sphere > 0.999F && draw.sphere < 1.001F);
+        RAWFRAME_EXPECT(draw.disk >= 0.0F && draw.disk < 1.0F);
+        RAWFRAME_EXPECT(draw.inside == 1);
+    }
+    RAWFRAME_EXPECT(world.randomStream("draws.draw", "choices") == choices);
 }
 
 namespace {
