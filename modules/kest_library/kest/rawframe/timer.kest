@@ -1,0 +1,39 @@
+module rawframe.timer
+
+// Timers the engine counts. A game declares components of these types; one
+// engine system counts them before the simulation phase each tick the
+// World ticks, so a paused World counts nothing, and what they count is
+// component data a checkpoint keeps. Counts are in ticks, never seconds.
+
+// An entity that ends: it lasts `ticks` more ticks and is destroyed at the
+// end of the last, its count left at nought; nought ends it this tick. A
+// system finds what is pending by its query, and cancels it by removing
+// the component.
+struct Lifespan {
+    ticks: u32
+}
+
+// A countdown: `left` ticks to go. On the tick it reaches nought `fired` is
+// true for the systems of the simulation phase, and it starts again from
+// `period`, or stays at nought when that is nought. `fired` is false every
+// other tick; a timer at nought does nothing until `left` is written.
+struct Timer {
+    left: u32
+    period: u32
+    fired: bool
+}
+
+// A lifespan of `ticks` ticks.
+fn lasting(ticks: u32) -> Lifespan {
+    return Lifespan(ticks)
+}
+
+// A timer firing once, `ticks` ticks from now.
+fn after(ticks: u32) -> Timer {
+    return Timer(ticks, 0, false)
+}
+
+// A timer firing every `ticks` ticks, the first `ticks` ticks from now.
+fn every(ticks: u32) -> Timer {
+    return Timer(ticks, ticks, false)
+}

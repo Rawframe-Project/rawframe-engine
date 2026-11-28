@@ -36,7 +36,7 @@ Systems of one machine never run at the same time.
 
 ## Doors
 
-A door is an engine function a program may call. Every door says whether untrusted code may call it; asking for one that is not marked so is refused when the program binds. The engine's own Kest modules under `modules/kest_library/kest/rawframe/` declare the types and doors a game sees: `world` (entities, create and destroy), `random`, `scene` (spawning prefabs), `physics2d`, `physics3d`, `navigation`, `animation`, `replication`, `admission`, `input`, `canvas`, `model`, `view`, `ui`, `sound`, `sequence`, `spline` and `studio`.
+A door is an engine function a program may call. Every door says whether untrusted code may call it; asking for one that is not marked so is refused when the program binds. The engine's own Kest modules under `modules/kest_library/kest/rawframe/` declare the types and doors a game sees: `world` (entities, create and destroy), `random`, `scene` (spawning prefabs), `physics2d`, `physics3d`, `navigation`, `animation`, `replication`, `admission`, `input`, `canvas`, `model`, `view`, `ui`, `sound`, `sequence`, `spline`, `timer` and `studio`.
 
 Each component a game declares also gets doors of its Kest type: `insert` and `remove`, and for a system that declares it, `get`, `has`, `count` and `entity` on any entity. A lookup is ordered as a read and is refused for a component the system writes.
 

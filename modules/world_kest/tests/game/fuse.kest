@@ -1,0 +1,18 @@
+module fuse
+
+import rawframe.timer
+
+// How often a lamp's timer fired, as the simulation phase saw it.
+struct Count {
+    fired: u32
+}
+
+fn tally(count: i32, blinks: [timer.Timer], counts: [Count]) {
+    let i = 0
+    while i < count {
+        if blinks[i].fired {
+            counts[i].fired = counts[i].fired + u32(1)
+        }
+        i = i + 1
+    }
+}

@@ -41,6 +41,7 @@
 #include "scene_follower.h"
 #include "sequences.h"
 #include "splines.h"
+#include "timers.h"
 #include "ui_doors.h"
 
 #include <algorithm>
@@ -295,6 +296,8 @@ public:
         // Sequences it plays, and the events they fire.
         RAWFRAME_TRY(planSequences());
         RAWFRAME_TRY(addSequenceDoors(doors, sequences_.get()));
+        // Lifespans and timers it counts.
+        RAWFRAME_TRY(planTimers());
         // The server bakes the navmesh its programs ask the way across.
         if (game_.navigation.has_value()) {
             navmesh_ = std::make_unique<GameNavmesh>(*game_.navigation);
@@ -355,6 +358,9 @@ public:
         }
         if (sequences_ != nullptr) {
             RAWFRAME_TRY(simulation_->addSystems(*sequences_));
+        }
+        if (timers_ != nullptr) {
+            RAWFRAME_TRY(simulation_->addSystems(*timers_));
         }
         debugging_.attach(systems_->machine());
         // Time a breakpoint holds a tick is not owed.
@@ -958,6 +964,41 @@ private:
         return {};
     }
 
+    /// Timers: the game's components of the timer types, laid out as the
+    /// engine reads them.
+    result::Status planTimers() {
+        GameTimerSettings found;
+        for (const GameComponent& component : game_.components) {
+            if (ofEngineType(component, "rawframe.timer.Lifespan")) {
+                found.lifespans.push_back(component.id);
+            } else if (ofEngineType(component, "rawframe.timer.Timer")) {
+                found.timers.push_back(component.id);
+            }
+        }
+        if (found.lifespans.empty() && found.timers.empty()) {
+            return {};
+        }
+        const bool kLifespans = found.lifespans.empty() ||
+                                laidOutAs(*program_, "rawframe.timer.Lifespan", sizeof(TimerLifespan), {{"ticks", 0}});
+        const bool kTimers = found.timers.empty() || laidOutAs(*program_,
+                                                               "rawframe.timer.Timer",
+                                                               sizeof(TimerCountdown),
+                                                               {{"left", offsetof(TimerCountdown, left)},
+                                                                {"period", offsetof(TimerCountdown, period)},
+                                                                {"fired", offsetof(TimerCountdown, fired)}});
+        if (!kLifespans || !kTimers) {
+            return std::unexpected<result::Error>{
+                result::fail(result::ErrorClass::InvalidArgument,
+                             kWorldKestDomain,
+                             code(WorldKestError::BadGameLine),
+                             "a game's lifespans and timers are laid out as rawframe.timer's: the game imports the "
+                             "module")
+                    .error()};
+        }
+        timers_ = std::make_unique<GameTimers>(std::move(found));
+        return {};
+    }
+
     /// Physics: the program's physics types must be laid out exactly as the
     /// engine's components are, field by field. A process that plays the
     /// game elsewhere runs no physics.
@@ -1042,6 +1083,7 @@ private:
     std::unique_ptr<GameNavmesh> navmesh_;
     std::unique_ptr<GameSplines> splines_;
     std::unique_ptr<GameSequences> sequences_;
+    std::unique_ptr<GameTimers> timers_;
     std::optional<world_animation::AnimationSettings> animation_;
     AnimationDoorContext animationDoors_;
     GamePersistence persistence_;
