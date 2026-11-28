@@ -88,15 +88,26 @@ inline CaptureSettings settings(SnapshotLimits limits = {}) {
 }
 
 /// A World with holes in its slots, references both ways and to itself, a
-/// reference to an entity that is gone, and a random stream drawn from.
+/// reference to an entity that is gone, a random stream drawn from, and,
+/// when watched, a lifecycle: one reader of every body added, which has read
+/// them, and one of links removed and entities destroyed, which has not.
 struct Sample {
     std::shared_ptr<const schema::SchemaRegistry> schema = registry();
     world::World world{schema};
     std::vector<world::EntityHandle> live;
 
-    Sample() {
+    explicit Sample(bool watched = true) {
         const auto kBody = *schema->key<Body>();
         const auto kLink = *schema->key<Link>();
+        if (watched) {
+            must(world.lifecycle()
+                     .watch("test.spawn", {.kind = world::LifecycleKind::Added, .component = kBody.id})
+                     .has_value());
+            must(world.lifecycle()
+                     .watch("test.cleanup", {.kind = world::LifecycleKind::Removed, .component = kLink.id})
+                     .has_value());
+            must(world.lifecycle().watch("test.cleanup", {.kind = world::LifecycleKind::Destroyed}).has_value());
+        }
         std::vector<world::EntityHandle> made;
         for (int index = 0; index < 8; ++index) {
             made.push_back(*world.create());
@@ -126,6 +137,14 @@ struct Sample {
         auto& stream = world.randomStream("test.owner", "dice");
         static_cast<void>(stream.nextU32());
         static_cast<void>(world.randomStream("test.owner", "coins").nextU64());
+        if (watched) {
+            world.lifecycle().markRead("test.spawn");
+            // A linked entity made and destroyed: its link's last value
+            // names the first entity, and the entity itself is gone.
+            const world::EntityHandle kGone = *world.create();
+            must(world.insert(kGone, kLink, Link{.target = live[0], .other = kGone, .strength = 4}).has_value());
+            must(world.destroy(kGone).has_value());
+        }
     }
 };
 

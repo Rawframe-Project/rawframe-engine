@@ -58,6 +58,22 @@ A door is an engine function a program calls through an `extern fn` its library 
 
 Creating, destroying, inserting and removing take effect at the next barrier, after the system ends: a system never sees its own structural changes in the same run.
 
+## What came and went
+
+A system that sets something up when a component appears, or cleans up when one goes, names it on its line instead of scanning for it every tick:
+
+```
+system shop.restock simulation restock write shop.till added shop.stall removed shop.stall destroyed
+```
+
+After its columns and scans, its function takes, for each term in line order:
+
+- `added`: `count: i32` and `entities: [world.Entity]`, the entities that gained the component.
+- `removed`: `count: i32`, `values: [T]` (each component's last value) and `entities: [world.Entity]`, the entities that lost it, by removal or destruction. Its component is plain data.
+- `destroyed`: `count: i32` and `entities: [world.Entity]`.
+
+Each holds what happened since the system's last successful run, oldest first. A change made by a system's commands counts at the barrier after it, so a system in the same phase sees it the next tick. A run that fails is given the same changes again. A system's first run is given every current holder as added, so the game's starting entities count too. An entity named in `added` may since have lost the component, and one in `removed` or `destroyed` may no longer exist. The arrays are read-only copies, so untrusted code may read them. A predicted system takes no lifecycle term.
+
 ## Randomness
 
 Never use a clock or the platform for anything that decides gameplay. Draw from a World random stream the system declares: the same seed and inputs give the same draws on every machine, so a server, a checkpoint restore and a predicting client agree. A predicted system may not draw from a World stream.

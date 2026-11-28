@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <cstring>
 #include <numeric>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace rawframe::world_snapshot {
 
@@ -37,6 +39,31 @@ struct StagedStream {
     std::string owner;
     std::string name;
     world::Pcg32 state{0, 0};
+};
+
+/// The lifecycle, decoded: components by their projection, entities by
+/// place, and a removed value's entity fields holding places.
+struct StagedLifecycle {
+    struct Watch {
+        world::LifecycleKind kind;
+        const SnapshotComponent* component = nullptr;
+    };
+    struct Reader {
+        std::string identity;
+        std::uint64_t cursor = 0;
+        std::vector<Watch> watches;
+    };
+    struct Change {
+        std::uint64_t sequence = 0;
+        world::LifecycleKind kind;
+        const SnapshotComponent* component = nullptr;
+        std::uint64_t place = 0;
+        std::vector<std::byte> value;
+    };
+    std::uint64_t nextSequence = 0;
+    std::uint64_t dropped = 0;
+    std::vector<Reader> readers;
+    std::vector<Change> changes;
 };
 
 /// Reads one field into `value`, refusing what capture never writes: a NaN
@@ -113,6 +140,94 @@ readField(Input& in, const SnapshotField& field, std::byte* value, std::uint64_t
     return detail::malformed("a field kind generation 1 does not have");
 }
 
+/// Reads what a watch or a change names: its kind and, for an addition or a
+/// removal, the projected component it names.
+result::Status readKind(Input& in,
+                        const SnapshotProjection& projection,
+                        world::LifecycleKind& kind,
+                        const SnapshotComponent*& component) {
+    std::uint8_t raw = 0;
+    if (!in.u8(raw) || raw > static_cast<std::uint8_t>(world::LifecycleKind::Destroyed)) {
+        return detail::malformed("a lifecycle names a kind of change there is not");
+    }
+    kind = static_cast<world::LifecycleKind>(raw);
+    component = nullptr;
+    if (kind == world::LifecycleKind::Destroyed) {
+        return {};
+    }
+    std::span<const std::byte> subject;
+    if (!in.take(sizeof(detail::Subject), subject)) {
+        return detail::malformed("a lifecycle is short");
+    }
+    const auto kFound = std::ranges::find_if(projection.components, [&](const SnapshotComponent& each) {
+        return std::ranges::equal(detail::subjectOf(each.id), subject);
+    });
+    if (kFound == projection.components.end()) {
+        return detail::malformed("a lifecycle names a component the projection does not");
+    }
+    component = &*kFound;
+    return {};
+}
+
+/// The lifecycle's payload, as capture writes it and nothing else.
+result::Result<StagedLifecycle> readLifecycle(std::span<const std::byte> payload,
+                                              const SnapshotProjection& projection,
+                                              std::uint64_t entities,
+                                              std::uint64_t& references) {
+    Input in{payload};
+    StagedLifecycle read;
+    std::uint32_t readers = 0;
+    if (!in.u64(read.nextSequence) || !in.u64(read.dropped) || !in.u32(readers) ||
+        readers > world::kMaximumLifecycleReaders) {
+        return detail::malformed("a lifecycle is short, or has more readers than a World keeps");
+    }
+    for (std::uint32_t index = 0; index < readers; ++index) {
+        StagedLifecycle::Reader& reader = read.readers.emplace_back();
+        std::uint32_t length = 0;
+        std::span<const std::byte> text;
+        std::uint32_t watches = 0;
+        if (!in.u32(length) || length == 0 || length > world::kMaximumLifecycleIdentityBytes ||
+            !in.take(length, text) || !in.u64(reader.cursor) || !in.u32(watches) ||
+            watches > world::kMaximumLifecycleWatches) {
+            return detail::malformed("a lifecycle reader is short or past its bounds");
+        }
+        reader.identity.assign(reinterpret_cast<const char*>(text.data()), text.size());
+        if (index != 0 && read.readers[index - 1].identity >= reader.identity) {
+            return detail::malformed("lifecycle readers are out of order or repeated");
+        }
+        for (std::uint32_t watch = 0; watch < watches; ++watch) {
+            StagedLifecycle::Watch& held = reader.watches.emplace_back();
+            RAWFRAME_TRY(readKind(in, projection, held.kind, held.component));
+        }
+    }
+    std::uint32_t changes = 0;
+    if (!in.u32(changes) || changes > world::kMaximumLifecycleChanges) {
+        return detail::malformed("a lifecycle holds more changes than a World keeps");
+    }
+    for (std::uint32_t index = 0; index < changes; ++index) {
+        StagedLifecycle::Change& change = read.changes.emplace_back();
+        std::uint8_t valued = 0;
+        if (!in.u64(change.sequence)) {
+            return detail::malformed("a lifecycle change is short");
+        }
+        RAWFRAME_TRY(readKind(in, projection, change.kind, change.component));
+        if (!in.u64(change.place) || change.place > entities || !in.u8(valued) || valued > 1 ||
+            (valued == 1 && change.kind != world::LifecycleKind::Removed)) {
+            return detail::malformed("a lifecycle change names a place past the last entity, or a value it has not");
+        }
+        if (valued == 1) {
+            change.value.resize(change.component->size);
+            for (const SnapshotField& field : change.component->fields) {
+                RAWFRAME_TRY(readField(in, field, change.value.data(), entities, references));
+            }
+        }
+    }
+    if (in.remaining() != 0) {
+        return detail::malformed("a lifecycle is not its exact length");
+    }
+    return read;
+}
+
 /// Every chunk from the prologue to the footer, in order, each checked
 /// against its digest, with the manifest checked against them all.
 result::Result<std::vector<ChunkHeader>> walkChunks(std::span<const std::byte> artifact,
@@ -156,6 +271,8 @@ result::Result<std::vector<ChunkHeader>> walkChunks(std::span<const std::byte> a
             (kSubjectless && kChunk.subject != detail::Subject{}) ||
             (kChunk.kind == ChunkKind::RandomStreams && kBefore.kind == ChunkKind::RandomStreams) ||
             (kChunk.kind == ChunkKind::ModSet && kBefore.kind == ChunkKind::ModSet) ||
+            (kChunk.kind == ChunkKind::Lifecycle &&
+             (kBefore.kind == ChunkKind::Lifecycle || kChunk.recordCount != 1)) ||
             (kChunk.kind == ChunkKind::ComponentRows && kBefore.kind == ChunkKind::ComponentRows &&
              kChunk.subject < kBefore.subject)) {
             return detail::malformed("the chunks are not in generation 1's order");
@@ -300,6 +417,7 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
     std::uint64_t decoded = 0;
     std::vector<StagedComponent> staged;
     std::vector<StagedStream> streams;
+    std::optional<StagedLifecycle> lifecycle;
     for (std::size_t index = 1; index + 1 < kChunks.size(); ++index) {
         const ChunkHeader& kChunk = kChunks[index];
         const std::span<const std::byte> kPayload = payloadOf(artifact, kChunk);
@@ -314,7 +432,8 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
         // full, so one World has one artifact. A component's group follows
         // how wide its rows are.
         const ChunkHeader& kBefore = kChunks[index - 1];
-        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet;
+        const bool kGrouped = kChunk.kind != ChunkKind::RandomStreams && kChunk.kind != ChunkKind::ModSet &&
+                              kChunk.kind != ChunkKind::Lifecycle;
         std::size_t group = limits.rowsPerChunk;
         if (kChunk.kind == ChunkKind::ComponentRows) {
             const auto kComponent = std::find_if(
@@ -404,6 +523,12 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
             static_cast<void>(in.take(kPayload.size(), read));
             break;
         }
+        case ChunkKind::Lifecycle: {
+            std::span<const std::byte> read;
+            static_cast<void>(in.take(kPayload.size(), read));
+            RAWFRAME_TRY_ASSIGN(lifecycle, readLifecycle(read, projection, kTotals.entities, references));
+            break;
+        }
         case ChunkKind::WorldHeader:
         case ChunkKind::Manifest:
             break;
@@ -463,6 +588,52 @@ result::Result<CheckpointFacts> restore(std::span<const std::byte> artifact,
     }
     for (StagedStream& stream : streams) {
         candidate.restoreRandomStream(std::move(stream.owner), std::move(stream.name), stream.state);
+    }
+    // The lifecycle last, replacing whatever the values recorded on their
+    // way in: places become the candidate's entities, components its own.
+    if (lifecycle.has_value()) {
+        const auto kHandleOf = [&](std::uint64_t place) {
+            return place == 0 ? world::EntityHandle{} : handles[static_cast<std::size_t>(place - 1)];
+        };
+        const auto kRuntimeOf = [&](const SnapshotComponent* component) -> std::optional<schema::ComponentRuntimeId> {
+            if (component == nullptr) {
+                return std::nullopt;
+            }
+            return *candidate.registry().find(component->id);
+        };
+        std::vector<world::LifecycleReader> readers;
+        for (StagedLifecycle::Reader& reader : lifecycle->readers) {
+            world::LifecycleReader& made = readers.emplace_back(
+                world::LifecycleReader{.identity = std::move(reader.identity), .cursor = reader.cursor, .watches = {}});
+            for (const StagedLifecycle::Watch& watch : reader.watches) {
+                made.watches.push_back(
+                    world::LifecycleWatch{.kind = watch.kind, .component = kRuntimeOf(watch.component)});
+            }
+        }
+        std::vector<world::LifecycleChange> changes;
+        for (StagedLifecycle::Change& change : lifecycle->changes) {
+            if (!change.value.empty()) {
+                for (const SnapshotField& field : change.component->fields) {
+                    if (field.kind != FieldKind::Entity) {
+                        continue;
+                    }
+                    std::uint64_t place = 0;
+                    std::memcpy(&place, change.value.data() + field.offset, sizeof place);
+                    const world::EntityHandle kHandle = kHandleOf(place);
+                    std::memcpy(change.value.data() + field.offset, &kHandle, sizeof kHandle);
+                }
+            }
+            changes.push_back(world::LifecycleChange{.sequence = change.sequence,
+                                                     .kind = change.kind,
+                                                     .component = kRuntimeOf(change.component),
+                                                     .entity = kHandleOf(change.place),
+                                                     .value = std::move(change.value)});
+        }
+        if (!candidate.lifecycle()
+                 .restore(std::move(readers), std::move(changes), lifecycle->nextSequence, lifecycle->dropped)
+                 .has_value()) {
+            return detail::malformed("a lifecycle's readers or changes are not consistent");
+        }
     }
     return CheckpointFacts{.tick = world::TickIndex{kHeader.tick},
                            .rate = world::TickRate{.ticks = static_cast<std::uint32_t>(kHeader.rateNumerator),

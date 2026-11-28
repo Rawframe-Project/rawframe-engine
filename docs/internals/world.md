@@ -8,6 +8,7 @@ A World is one authoritative ECS domain: entities, their components, and the sys
 - [Entities](#entities)
 - [Storage and queries](#storage-and-queries)
 - [Systems, the schedule and barriers](#systems-the-schedule-and-barriers)
+- [What came and went](#what-came-and-went)
 - [Ticks](#ticks)
 - [Checkpoints](#checkpoints)
 - [Saves](#saves)
@@ -38,6 +39,12 @@ While systems run, the World's structure is locked. Creating and destroying enti
 
 Kest systems never write the World directly: they stage changes through the same buffers ([kest.md](kest.md)).
 
+## What came and went
+
+The World's lifecycle records the components entities gain and lose and the entities destroyed, for the readers that watch them, in the order the structure changed. A system's commands are recorded at the barrier that applies them. A removal keeps the component's last value, for plain data, and a destruction records each component it removes before the destruction itself. Nothing is recorded that no reader watches.
+
+Each reader, a system by its identity, has a cursor and reads every change once from it. It marks them read when its run succeeds, and a change every reader has read is let go. The lifecycle holds at most 8,192 changes and 256 KiB of removed values, and has at most 64 readers. Past those bounds the oldest changes are dropped and counted, so a reader that never runs costs a bounded amount. It is World state, and a checkpoint carries it in one chunk: entities by their places, nought for one no longer live, and only the changes of the components the checkpoint carries.
+
 ## Ticks
 
 A tick is a 64-bit count, never derived from accumulated seconds and never skipped. The tick rate is an exact fraction, ticks per seconds. Ticks owed accumulate from monotonic time; at most a set number run in one Host iteration, and the rest is debt, measured and never folded into a larger step. Time a World stands still on purpose (paused, or held at a debugger's breakpoint) is not owed. See [runtime.md](runtime.md#the-host) for what an overloaded World does.
@@ -46,7 +53,7 @@ A tick is a 64-bit count, never derived from accumulated seconds and never skipp
 
 ## Checkpoints
 
-A checkpoint is a complete, canonical, integrity-checked artifact of one committed World: a header, the entity directory, component rows by type in row groups, the World's random streams, the mods it ran with, a manifest, and a completion footer, with SHA-256 over every chunk and the whole. What it holds is the World's projection: the components that persist and their fields, each written field by field in a declared order, never as memory, so padding and layout never reach an artifact.
+A checkpoint is a complete, canonical, integrity-checked artifact of one committed World: a header, the entity directory, component rows by type in row groups, the World's random streams, the mods it ran with, its lifecycle, a manifest, and a completion footer, with SHA-256 over every chunk and the whole. What it holds is the World's projection: the components that persist and their fields, each written field by field in a declared order, never as memory, so padding and layout never reach an artifact.
 
 Restore reads a checkpoint into an empty candidate World built off to the side and publishes it in one exchange between ticks; it cannot fail once published. A checkpoint of another game, schema or profile, one past its limits, or one with a reference to nothing it holds is refused with a typed error, and the running World is untouched.
 

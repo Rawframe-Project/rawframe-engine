@@ -223,6 +223,16 @@ public:
                 const GameComponent& component = *componentNamed(name);
                 scans.push_back(KestScan{.component = component.id, .kestType = component.kestType});
             }
+            std::vector<KestLifecycleTerm>& terms = lifecycle_.emplace_back();
+            for (const GameSystem::Lifecycle& term : system.lifecycle) {
+                if (term.kind == world::LifecycleKind::Destroyed) {
+                    terms.push_back(KestLifecycleTerm{.kind = term.kind, .component = {}, .kestType = {}});
+                    continue;
+                }
+                const GameComponent& component = *componentNamed(term.component);
+                terms.push_back(
+                    KestLifecycleTerm{.kind = term.kind, .component = component.id, .kestType = component.kestType});
+            }
         }
         // A system a mod replaces runs the mod's function instead, on the
         // mod's machine.
@@ -247,7 +257,8 @@ public:
                                                          .before = before_[index],
                                                          .randomStreams = streams_[index],
                                                          .lookups = lookups_[index],
-                                                         .scans = scans_[index]});
+                                                         .scans = scans_[index],
+                                                         .lifecycle = lifecycle_[index]});
         }
         entityOffsets_.reserve(game_.components.size());
         for (const GameComponent& component : game_.components) {
@@ -1100,6 +1111,7 @@ private:
     std::vector<std::vector<std::string_view>> streams_;
     std::vector<std::vector<schema::ComponentTypeId>> lookups_;
     std::vector<std::vector<KestScan>> scans_;
+    std::vector<std::vector<KestLifecycleTerm>> lifecycle_;
     /// Before the machines whose doors name its services.
     std::unique_ptr<ModServices> modServices_;
     /// Every Kest system's time per tick, the game's and its mods'.

@@ -6,6 +6,7 @@
 #include "rawframe/world/archetype.h"
 #include "rawframe/world/command_buffer.h"
 #include "rawframe/world/entity.h"
+#include "rawframe/world/lifecycle.h"
 #include "rawframe/world/random.h"
 
 #include <cstddef>
@@ -114,6 +115,16 @@ public:
     /// is published.
     void restoreRandomStream(std::string owner, std::string name, Pcg32 state);
 
+    /// The components entities gained and lost and the entities destroyed,
+    /// for the readers that watch them: recorded as the structure changes,
+    /// so at the barrier for a system's commands.
+    [[nodiscard]] Lifecycle& lifecycle() noexcept {
+        return lifecycle_;
+    }
+    [[nodiscard]] const Lifecycle& lifecycle() const noexcept {
+        return lifecycle_;
+    }
+
     /// Applies a command buffer in recording order and clears it. All or
     /// nothing on capacity: if the World cannot fit every entity the buffer
     /// creates, nothing is applied and the result is `resource_exhausted`.
@@ -159,6 +170,9 @@ private:
     /// Moves an entity's row to another archetype, carrying shared components,
     /// and returns its new row.
     std::size_t moveEntity(EntityHandle entity, std::uint32_t to);
+    /// Records the removal of `component` from a live entity that holds it,
+    /// with its value, if a reader watches it.
+    void recordRemoval(EntityHandle entity, schema::ComponentRuntimeId component);
 
     std::shared_ptr<const schema::SchemaRegistry> registry_;
     WorldSettings settings_;
@@ -171,6 +185,7 @@ private:
     std::map<std::pair<std::string, std::string>, Pcg32, std::less<>> randomStreams_;
     /// The persistent identity component, if the registry has it.
     std::optional<schema::ComponentRuntimeId> persistent_;
+    Lifecycle lifecycle_;
 };
 
 } // namespace rawframe::world

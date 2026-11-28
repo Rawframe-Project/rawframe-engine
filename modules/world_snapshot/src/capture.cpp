@@ -5,7 +5,10 @@
 #include <bit>
 #include <cstring>
 #include <numeric>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace rawframe::world_snapshot {
 
@@ -107,6 +110,85 @@ void writeField(Output& out,
         out.u64(kPlace != places.end() ? kPlace->second : 0);
         return;
     }
+    }
+}
+
+/// The projected component a lifecycle names, or null when the checkpoint
+/// does not carry it.
+const Resolved* projectedOf(std::span<const Resolved> resolved, schema::ComponentRuntimeId runtime) noexcept {
+    const auto kFound = std::ranges::find(resolved, runtime, &Resolved::runtime);
+    return kFound == resolved.end() ? nullptr : &*kFound;
+}
+
+/// Writes what one watch or change names: its kind, then, for an addition
+/// or a removal, the component's identity.
+void writeKind(Output& out, world::LifecycleKind kind, const Resolved* component) {
+    out.u8(static_cast<std::uint8_t>(kind));
+    if (component != nullptr) {
+        out.bytes(detail::subjectOf(component->component->id));
+    }
+}
+
+/// The lifecycle's payload: the next sequence and the count dropped; each
+/// reader by identity, in identity order, with its cursor and what it
+/// watches; then each kept change: its sequence, kind and component, its
+/// entity's place (nought for one no longer live), and a removal's last
+/// value as its fields. Only what names a carried component, or a
+/// destruction, is written.
+void writeLifecycle(Output& out,
+                    const world::Lifecycle& lifecycle,
+                    std::span<const Resolved> resolved,
+                    const std::unordered_map<world::EntityHandle, std::uint64_t>& places,
+                    std::uint64_t& references) {
+    out.u64(lifecycle.nextSequence());
+    out.u64(lifecycle.dropped());
+    std::vector<const world::LifecycleReader*> readers;
+    for (const world::LifecycleReader& reader : lifecycle.readers()) {
+        readers.push_back(&reader);
+    }
+    std::ranges::sort(readers, {}, [](const world::LifecycleReader* reader) {
+        return std::string_view{reader->identity};
+    });
+    out.u32(static_cast<std::uint32_t>(readers.size()));
+    for (const world::LifecycleReader* reader : readers) {
+        out.u32(static_cast<std::uint32_t>(reader->identity.size()));
+        out.bytes(std::as_bytes(std::span{reader->identity.data(), reader->identity.size()}));
+        out.u64(reader->cursor);
+        std::vector<std::pair<world::LifecycleKind, const Resolved*>> watches;
+        for (const world::LifecycleWatch& watch : reader->watches) {
+            const Resolved* const kComponent =
+                watch.component.has_value() ? projectedOf(resolved, *watch.component) : nullptr;
+            if (watch.kind == world::LifecycleKind::Destroyed || kComponent != nullptr) {
+                watches.emplace_back(watch.kind, kComponent);
+            }
+        }
+        out.u32(static_cast<std::uint32_t>(watches.size()));
+        for (const auto& [kKind, kComponent] : watches) {
+            writeKind(out, kKind, kComponent);
+        }
+    }
+    std::vector<std::pair<const world::LifecycleChange*, const Resolved*>> changes;
+    for (const world::LifecycleChange& change : lifecycle.changes()) {
+        const Resolved* const kComponent =
+            change.component.has_value() ? projectedOf(resolved, *change.component) : nullptr;
+        if (change.kind == world::LifecycleKind::Destroyed || kComponent != nullptr) {
+            changes.emplace_back(&change, kComponent);
+        }
+    }
+    out.u32(static_cast<std::uint32_t>(changes.size()));
+    for (const auto& [kChange, kComponent] : changes) {
+        out.u64(kChange->sequence);
+        writeKind(out, kChange->kind, kComponent);
+        const auto kPlace = places.find(kChange->entity);
+        out.u64(kPlace != places.end() ? kPlace->second : 0);
+        const bool kValued =
+            kChange->kind == world::LifecycleKind::Removed && kChange->value.size() == kComponent->component->size;
+        out.u8(kValued ? 1 : 0);
+        if (kValued) {
+            for (const SnapshotField& field : kComponent->component->fields) {
+                writeField(out, field, kChange->value.data(), places, references);
+            }
+        }
     }
 }
 
@@ -245,6 +327,13 @@ stage(const world::World& world, const SnapshotProjection& projection, const Cap
         Output mods;
         detail::writeModSet(mods, settings.identity.mods);
         chunks.push_back(Pending{ChunkKind::ModSet, settings.identity.mods.size(), {}, std::move(mods.data())});
+    }
+    // The lifecycle whole, in one chunk its bounds keep under a MiB, for a
+    // World with readers.
+    if (!world.lifecycle().readers().empty()) {
+        Output lifecycle;
+        writeLifecycle(lifecycle, world.lifecycle(), kResolved, places, totals.references);
+        chunks.push_back(Pending{ChunkKind::Lifecycle, 1, {}, std::move(lifecycle.data())});
     }
     for (const Pending& chunk : chunks) {
         totals.decodedBytes += chunk.payload.size();

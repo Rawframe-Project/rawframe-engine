@@ -5,6 +5,7 @@ rawframe_module(NAME world
         src/archetype.cpp
         src/column_query.cpp
         src/command_buffer.cpp
+        src/lifecycle.cpp
         src/persistent.cpp
         src/random.cpp
         src/schedule.cpp

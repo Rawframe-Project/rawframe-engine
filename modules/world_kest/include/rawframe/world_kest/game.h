@@ -132,6 +132,7 @@
 #include "rawframe/result/result.h"
 #include "rawframe/schema/stable_id.h"
 #include "rawframe/world/column_query.h"
+#include "rawframe/world/lifecycle.h"
 #include "rawframe/world/schedule.h"
 #include "rawframe/world_replication/prediction.h"
 #include "rawframe/world_replication/records.h"
@@ -185,12 +186,23 @@ struct GameSystem {
     /// <component>` pairs: each lent after its columns as a count,
     /// the values, and their entities, in World order, as the run began.
     std::vector<std::string> scans;
+    /// What came and went since it last ran, from `added <component>`,
+    /// `removed <component>` and `destroyed`, in line order: each lent after
+    /// its scans. None names a component for `destroyed`.
+    struct Lifecycle {
+        world::LifecycleKind kind = world::LifecycleKind::Added;
+        std::string component;
+    };
+    std::vector<Lifecycle> lifecycle;
     /// Runs on predicting clients too, over the player alone.
     bool predicted = false;
     /// The effects it emits, from `emits <name>` pairs; only a
     /// predicted system emits, and each effect has one emitter.
     std::vector<std::string> emits;
 };
+
+/// The most lifecycle terms one system takes.
+inline constexpr std::size_t kMaximumLifecycleTerms = 8;
 
 /// Presentation state, from a `presentation <component>... on
 /// <component>` line: components a client that draws attaches, zeroed, to

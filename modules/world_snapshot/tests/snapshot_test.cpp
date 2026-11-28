@@ -1,5 +1,6 @@
-// World checkpoints: a round trip that restores every value, reference, and
-// random stream and captures to the same bytes again; canonical NaNs; row
+// World checkpoints: a round trip that restores every value, reference,
+// random stream and lifecycle change and captures to the same bytes again;
+// canonical NaNs; row
 // groups; refusal of every damaged, foreign, or oversized artifact; and
 // hostile artifacts with matching digests restored only as they capture;
 // and a capture staged at the safe point and sealed after the World ran on.
@@ -48,7 +49,8 @@ RAWFRAME_TEST(ACheckpointRestoresEveryValueReferenceAndStream) {
         return;
     }
     RAWFRAME_EXPECT(kFacts->tick.value == 1234 && kFacts->rate.ticks == 60 && kFacts->rate.seconds == 1);
-    RAWFRAME_EXPECT(kFacts->entities == 6 && kFacts->rows == 8 && kFacts->references == 4);
+    // The removed link's last value names an entity too.
+    RAWFRAME_EXPECT(kFacts->entities == 6 && kFacts->rows == 8 && kFacts->references == 5);
     RAWFRAME_EXPECT(candidate.entityCount() == 6);
 
     // The restored entities are the originals in slot order.
@@ -79,6 +81,40 @@ RAWFRAME_TEST(ACheckpointRestoresEveryValueReferenceAndStream) {
     RAWFRAME_EXPECT(sixth != nullptr && sixth->target == restored[0] && sixth->other.isNull());
     RAWFRAME_EXPECT(fourth != nullptr && fourth->target.isNull() && fourth->other == restored[2]);
     RAWFRAME_EXPECT(candidate.randomStreams() == sample.world.randomStreams());
+    // The lifecycle as it was: the readers, their cursors and watches, and
+    // every change, its entities the restored ones or null for the gone.
+    const world::Lifecycle& kBefore = sample.world.lifecycle();
+    const world::Lifecycle& kAfter = candidate.lifecycle();
+    RAWFRAME_EXPECT(kAfter.readers().size() == 2 && kAfter.nextSequence() == kBefore.nextSequence() &&
+                    kAfter.dropped() == kBefore.dropped() &&
+                    kAfter.unread("test.spawn").size() == kBefore.unread("test.spawn").size());
+    for (const world::LifecycleReader& reader : kBefore.readers()) {
+        const world::LifecycleReader* const kCopy = kAfter.reader(reader.identity);
+        RAWFRAME_EXPECT(kCopy != nullptr && kCopy->cursor == reader.cursor && kCopy->watches == reader.watches);
+    }
+    const auto kChanges = kAfter.unread("test.cleanup");
+    RAWFRAME_EXPECT(kChanges.size() == kBefore.unread("test.cleanup").size() && kChanges.size() == 9);
+    if (kChanges.size() == 9) {
+        // The two entities destroyed first, five bodies added, then the gone
+        // entity's link and the gone entity itself.
+        RAWFRAME_EXPECT(kChanges[0].kind == world::LifecycleKind::Destroyed && kChanges[0].entity.isNull() &&
+                        kChanges[1].kind == world::LifecycleKind::Destroyed);
+        for (std::size_t index = 2; index < 7; ++index) {
+            RAWFRAME_EXPECT(kChanges[index].kind == world::LifecycleKind::Added &&
+                            std::ranges::contains(restored, kChanges[index].entity));
+        }
+        Link last{};
+        RAWFRAME_EXPECT(kChanges[7].kind == world::LifecycleKind::Removed && kChanges[7].entity.isNull() &&
+                        kChanges[7].value.size() == sizeof last);
+        if (kChanges[7].value.size() == sizeof last) {
+            std::memcpy(&last, kChanges[7].value.data(), sizeof last);
+            RAWFRAME_EXPECT(last.target == restored[0] && last.other.isNull() && last.strength == 4);
+        }
+        RAWFRAME_EXPECT(kChanges[8].kind == world::LifecycleKind::Destroyed && kChanges[8].entity.isNull());
+        for (std::size_t index = 0; index < kChanges.size(); ++index) {
+            RAWFRAME_EXPECT(kChanges[index].sequence == kBefore.unread("test.cleanup")[index].sequence);
+        }
+    }
 
     // The restored World captures to the same bytes: the artifact is a
     // function of the state, not of how the World came to hold it.
@@ -148,9 +184,9 @@ RAWFRAME_TEST(ChunksAreHeldToTheProfile) {
     // The chunk ceilings: a component's rows wider than the
     // chunk allows split into groups that fit; too many chunks are refused
     // on capture, and on restore before anything is decoded.
-    Sample sample;
+    Sample sample{false};
     // A body row is 35 bytes, so two to a chunk of 80; the random streams'
-    // chunk still fits.
+    // chunk still fits. A lifecycle is a chunk whole, so this World has none.
     const world_snapshot::SnapshotLimits kNarrow{.maximumChunkBytes = 80};
     RAWFRAME_EXPECT(world_snapshot::rowGroup(projection().components[0], kNarrow) == 2);
     const auto kNarrowed = world_snapshot::capture(sample.world, projection(), settings(kNarrow));
