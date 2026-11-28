@@ -44,6 +44,22 @@ The web client and its page files are found under `<tools>/web/` unless named (`
 - `--target android --address <host>` packs the game for Android: `android/game/` is what the client's package carries, pinned to a server identity made once, and `server/` the server a phone reaches at `--address`. With `--android-client <librawframe_client.so> --packager tools/android_apk.sh` the export makes the package itself; with `--android-keystore` and `--android-key-alias` it signs a release package, reading the keystore's password from `RAWFRAME_ANDROID_KEYSTORE_PASSWORD`.
 - `--target ios --address <host>` does the same for iOS; with `--ios-client <rawframe-client.app>` it makes the application, for the simulator.
 
+## The picture
+
+A native client reads its settings from `client.conf` beside it, and a phone's from `game/client.conf`. These lines set how the 3D scene is drawn; a value out of range stops the client with a record naming it.
+
+| Setting | Meaning |
+|---|---|
+| `scene.quality` | Which of their qualities the game's materials are drawn at: `low`, `medium`, or `high` (the default). |
+| `scene.anti_aliasing`, `scene.msaa_samples` | `taa` (the default), `fxaa`, `msaa`, or `off`; multisampling takes 2 or 4 (the default) samples. |
+| `scene.shadow_cascades`, `scene.shadow_side`, `scene.shadow_distance` | The sun's shadows: 0 to 4 cascades (4), each 64 to 4,096 texels a side (1,024), reaching 1 to 10,000 meters (100). |
+| `scene.shadow_filter` | How shadow edges are filtered: `hardware`, `soft` (the default), or `contact_hardening`. |
+| `scene.light_shadow_side` | The point and spot lights' shadow atlas: a power of two from 64 to 8,192 texels (2,048), or 0 for none. |
+| `scene.render_scale_percent` | Each view drawn at this many hundredths of its pixels each way and scaled to fit, 25 to 100 (100). |
+| `scene.render_scale_least_percent` | How far the scale may fall while the device cannot keep up, 25 to `scene.render_scale_percent` (the same, so it never falls); an exported game sets 50. |
+| `scene.width`, `scene.height` | The picture's size until a window gives one, 1 to 65,536 pixels (1,280 by 720). |
+| `scene.client` | In a process holding several clients, the one whose World is drawn; a game showing several local players by its layout names none. |
+
 ## Updates
 
 A folder can follow a release channel, so players get new versions without exporting again:

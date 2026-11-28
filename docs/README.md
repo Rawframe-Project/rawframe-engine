@@ -10,7 +10,7 @@
 - [Scenes and authoring](user/scenes-and-authoring.md): scenes, `rawframe-author`, sessions, agents over MCP, sharing.
 - [Assets](user/assets.md): sidecars, importers and cooking.
 - [UI](user/ui.md), [Sound](user/audio.md), [Animation](user/animation.md), [Localization](user/localization.md).
-- [Exporting](user/exporting.md): native folders, the web, Android and iOS, signing and updates.
+- [Exporting](user/exporting.md): native folders, the web, Android and iOS, the client's picture settings, signing and updates.
 - [Running a server](user/dedicated-server.md): configuration, logs, stopping, inspecting.
 - [Studio](user/studio.md): the optional editor.
 - [Mods](user/mods.md): extension points and mod descriptions.
