@@ -20,7 +20,8 @@ Dimension dimensionOf(float scale, float offset) noexcept {
 
 std::optional<Layout> layoutOf(const NodeFields& node) noexcept {
     if (node.direction > 3 || node.justify > 5 || node.alignItems > 4 || node.alignSelf > 4 || node.scroll > 3 ||
-        node.flexWrap > 2 || node.alignLines > 6 || !(node.aspect >= 0) || node.aspect > kMostAspect) {
+        node.flexWrap > 2 || node.alignLines > 6 || !(node.aspect >= 0) || node.aspect > kMostAspect ||
+        (node.aspect != 0 && node.aspect < 1 / kMostAspect)) {
         return std::nullopt;
     }
     const auto kSides = [](float value) {

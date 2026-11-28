@@ -29,6 +29,13 @@ RAWFRAME_TEST(ANodesFieldsLayOutAsTheTreeTakesThem) {
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.flexWrap = 3}).has_value());
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.alignLines = 7}).has_value());
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = -1}).has_value());
+    // An aspect past 4096 either way, which a side divided by it would make
+    // endless; nought is none, and the bounds themselves are kept.
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = 4097}).has_value());
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = 1e-40F}).has_value());
+    RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = 1.0F / 5000}).has_value());
+    RAWFRAME_EXPECT(layoutOf(NodeFields{.aspect = 0}).has_value() && layoutOf(NodeFields{.aspect = 4096}).has_value() &&
+                    layoutOf(NodeFields{.aspect = 1.0F / 4096}).has_value());
     RAWFRAME_EXPECT(!layoutOf(NodeFields{.aspect = std::numeric_limits<float>::quiet_NaN()}).has_value());
 }
 
